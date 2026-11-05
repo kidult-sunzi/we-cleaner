@@ -1,0 +1,17 @@
+# 构建产物（exe 走 GitHub Release，不进仓库）
+dist/
+build/
+*.spec
+
+# 构建时由 build.py 生成
+app.ico
+version.txt
+
+# Python
+__pycache__/
+*.py[cod]
+
+# 系统
+Thumbs.db
+desktop.ini
+.DS_Store

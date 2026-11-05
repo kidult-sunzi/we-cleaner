@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>小红车清理工具 · 界面预览</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:#1f2937;
+     display:flex;align-items:center;align-items:safe center;justify-content:center;
+     min-height:100vh;padding:24px;overflow-y:auto}
+.win{width:760px;background:#f7f9fc;border-radius:12px;overflow:hidden;
+     box-shadow:0 18px 50px rgba(20,40,70,.20);border:1px solid #d6dee9}
+.bar{background:#1b2430;color:#fff;padding:18px 24px 15px}
+.bar h1{font-size:20px;font-weight:700;letter-spacing:.5px}
+.bar p{font-size:12px;color:#a9bacb;margin-top:5px}
+.body{padding:18px 22px 20px}
+.card{background:#fff;border:1px solid #e1e7ef;border-radius:9px;padding:13px 16px;margin-bottom:13px}
+.card h2{font-size:13px;color:#5a6a7c;margin-bottom:10px;font-weight:700}
+.stat{display:flex;align-items:center;gap:9px;font-size:13px;padding:3px 0}
+.dot{width:9px;height:9px;border-radius:50%;background:#1a9d57;flex:none}
+.dot.warn{background:#d98207}.dot.gray{background:#9aa7b5}
+.stat b{font-weight:600}
+.choices{display:flex;flex-direction:column;gap:9px}
+.pick{display:flex;align-items:center;gap:13px;border:2px solid #e3e9f1;border-radius:9px;
+      padding:13px 15px;cursor:pointer;background:#fff;transition:.15s}
+.pick:hover{border-color:#a8c6ee}
+.pick.on{border-color:#2f7de1;background:#f0f6ff}
+.radio{width:19px;height:19px;border-radius:50%;border:2px solid #b9c5d3;flex:none;position:relative}
+.pick.on .radio{border-color:#2f7de1}
+.pick.on .radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:#2f7de1}
+.pick .who{font-size:15px;font-weight:700}
+.pick .sub{font-size:12px;color:#75839a;margin-top:3px}
+.pick .right{margin-left:auto;text-align:right;font-size:12px;color:#8a97a8;line-height:1.7}
+.hint{font-size:12px;color:#8a97a8;margin-top:9px}
+.btn{width:100%;border:0;border-radius:8px;cursor:pointer;font-family:inherit;transition:.15s}
+.main{background:#2f7de1;color:#fff;font-size:16px;font-weight:700;padding:15px;letter-spacing:2px}
+.main:hover:not(:disabled){background:#2668bd}
+.main:disabled{background:#b9c9dc;cursor:not-allowed}
+.main.busy,.main.busy:disabled{color:#fff;cursor:progress;
+  background:linear-gradient(90deg,#2f7de1,#6cb0f7,#2f7de1);background-size:200% 100%;
+  animation:sweep 1.1s linear infinite}
+@keyframes sweep{from{background-position:180% 0}to{background-position:-80% 0}}
+.subrow{display:flex;gap:9px;margin-top:9px}
+.subrow .btn{background:#fff;border:1px solid #d9e1eb;color:#42526a;font-size:13px;padding:11px 4px}
+.subrow .btn:hover{border-color:#2f7de1;color:#2f7de1}
+.logbox{background:#0f141a;border-radius:8px;padding:12px 14px;height:132px;overflow:auto;
+        font:12px/1.75 Consolas,"Cascadia Mono",monospace;color:#c8d3de}
+.logbox .ok{color:#7ee787}.logbox .tip{color:#ffd166}.logbox .dim{color:#7f8c9b}
+.foot{text-align:center;font-size:11px;color:#9aa7b5;margin-top:12px}
+.mask{position:fixed;inset:0;background:rgba(15,25,40,.45);display:none;
+      align-items:center;justify-content:center;z-index:9}
+.modal{background:#fff;border-radius:12px;padding:24px;width:390px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal h3{font-size:17px;margin-bottom:12px}
+.modal p{font-size:13px;line-height:1.9;color:#4a586b;white-space:pre-line}
+.mrow{display:flex;gap:10px;margin-top:20px}
+.mrow button{flex:1;padding:11px;border-radius:7px;border:1px solid #d9e1eb;background:#fff;
+             font:14px "Microsoft YaHei",sans-serif;cursor:pointer}
+.mrow .yes{background:#2f7de1;color:#fff;border-color:#2f7de1;font-weight:700}
+.mrow .no{background:#f3f6fa;color:#42526a}
+.mrow .no:hover{background:#e6ecf4}
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="bar">
+    <h1>小红车清理工具</h1>
+    <p>只删别人账号留下的订阅记录，自己的壁纸一张不动</p>
+  </div>
+  <div class="body">
+
+    <div class="card">
+      <h2>当前状态</h2>
+      <div class="stat"><span class="dot" id="acfDot"></span><span id="acfText">正在检测…</span></div>
+      <div class="stat"><span class="dot" id="steamDot"></span><span id="steamText">Steam 已退出，可以安全操作</span></div>
+      <div class="stat"><span class="dot warn" id="cacheDot"></span><span>创意工坊下载缓存（<b>仅 431960</b>，不含其他游戏）　<b id="cacheSize">检测中…</b></span></div>
+    </div>
+
+    <div class="card">
+      <h2>第 1 步　选出你自己的账号</h2>
+      <div class="choices" id="choices"></div>
+      <div class="hint">看昵称点一下就行，不用管那串数字。昵称来自本机 Steam 资料。</div>
+    </div>
+
+    <button class="btn main" id="mainBtn" disabled onclick="clean()">一 键 清 理（推荐）</button>
+    <div class="subrow">
+      <button class="btn" onclick="exitSteam()">一键退出 Steam</button>
+      <button class="btn" onclick="startSteam()">一键启动 Steam</button>
+    </div>
+    <div class="subrow">
+      <button class="btn" onclick="clearCache()">只清下载缓存</button>
+      <button class="btn" onclick="restore()">还原备份acf文件</button>
+      <button class="btn" onclick="uninstall()">卸载本工具</button>
+    </div>
+
+    <div class="card" style="margin-top:13px;margin-bottom:0">
+      <h2>运行日志</h2>
+      <div class="logbox" id="log"><span class="dim">等待操作…</span></div>
+    </div>
+    <div class="foot">每次修改自动备份，随时可还原 · 不删壁纸文件 · 不联网 · 不动云端订阅<br>
+      <span style="cursor:pointer;text-decoration:underline" onclick="showNotice()">查看注意事项</span></div>
+  </div>
+</div>
+
+<div class="mask" id="mask">
+  <div class="modal">
+    <h3 id="mTitle">确认</h3>
+    <p id="mText"></p>
+    <div class="mrow">
+      <button class="no" id="mCancel" onclick="closeModal(false)">取消</button>
+      <button class="yes" id="mYes" onclick="closeModal(true)">确定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var accList=[], chosen=null, busy=false, _cb=null, _resolve=null, st0=null;
+function pyapi(){return (window.pywebview&&window.pywebview.api)?window.pywebview.api:null;}
+function withTimeout(job,ms){return new Promise(function(res,rej){
+  var t=setTimeout(function(){res(null);},ms);
+  Promise.resolve(job).then(function(v){clearTimeout(t);res(v);},function(e){clearTimeout(t);rej(e);});
+});}
+var logEl=document.getElementById('log'), first=true;
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function log(s,cls){if(first){logEl.innerHTML='';first=false;}var d=document.createElement('div');if(cls)d.className=cls;d.textContent=s;logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
+function modal(title,text,cb,yesText,showCancel){
+  document.getElementById('mTitle').textContent=title;
+  document.getElementById('mText').textContent=text;
+  document.getElementById('mYes').textContent=yesText||'确定';
+  document.getElementById('mCancel').style.display=(showCancel===false)?'none':'';
+  _cb=cb;document.getElementById('mask').style.display='flex';
+}
+function closeModal(ok){
+  document.getElementById('mask').style.display='none';
+  var cb=_cb,r=_resolve;_cb=null;_resolve=null;
+  if(r){r(ok);if(!ok)log('已取消，没有改动任何文件','dim');}
+  else if(ok&&cb){cb();}
+  else if(!ok){log('已取消，没有改动任何文件','dim');}
+}
+function ask(title,text,yesText){return new Promise(function(res){_resolve=res;modal(title,text,null,yesText,true);});}
+function info(title,text,yesText){modal(title,text,null,yesText||'知道了',false);}
+var _tick=null,_t0=0;
+function setBusy(b){
+  busy=b;
+  var m=document.getElementById('mainBtn');
+  m.classList.toggle('busy',b);
+  if(b){
+    _t0=Date.now();
+    log('开始处理，请不要关闭窗口…','tip');
+    m.textContent='正在处理… 0 秒';
+    _tick=setInterval(function(){
+      var sec=Math.floor((Date.now()-_t0)/1000);
+      m.textContent='正在处理… '+sec+' 秒';
+      if(sec===5||sec===15||sec===30||sec===60)
+        log('仍在处理中（已用时 '+sec+' 秒），请稍等…','dim');
+    },1000);
+  }else{
+    if(_tick){clearInterval(_tick);_tick=null;}
+    m.textContent='一 键 清 理（推荐）';
+  }
+  m.disabled=b||!chosen;
+  document.querySelectorAll('.subrow .btn').forEach(function(x){x.disabled=b;});
+}
+function render(st){
+  st0=st;
+  var d=document.getElementById('acfDot'),t=document.getElementById('acfText');
+  d.className='dot'+(st.acf_ok?'':' warn');
+  t.textContent=st.acf_ok?'已找到配置文件':'没找到 appworkshop_431960.acf，请确认已安装 Wallpaper Engine 或检查 Steam 库路径';
+  var sd=document.getElementById('steamDot'),sx=document.getElementById('steamText');
+  sd.className='dot'+(st.steam==='running'?' warn':'');
+  sx.textContent=st.steam==='running'?'Steam 正在运行 —— 清理前需要先退出':'Steam 已退出，可以安全操作';
+  document.getElementById('cacheSize').textContent=st.cache;
+  document.getElementById('cacheDot').className='dot'+(st.cache.indexOf('0 GB')===0?'':' warn');
+  var box=document.getElementById('choices');box.innerHTML='';
+  // 刷新状态不该清掉用户已选的账号；用账号尾号把选择带回来
+  var keep=(chosen&&accList[chosen-1])?accList[chosen-1].tail:null;
+  accList=st.accounts||[];chosen=null;
+  if(keep){for(var k=0;k<accList.length;k++){if(accList[k].tail===keep){chosen=k+1;break;}}}
+  accList.forEach(function(a,i){
+    var el=document.createElement('div');el.className='pick'+(i+1===chosen?' on':'');el.dataset.idx=i+1;
+    el.onclick=function(){pick(el,i+1);};
+    el.innerHTML='<span class="radio"></span><div><div class="who">'+esc(a.name)+'</div><div class="sub">'+a.count+' 张壁纸 · 账号尾号 '+esc(a.tail)+'</div></div><div class="right">最近使用<br>'+esc(a.last)+'</div>';
+    box.appendChild(el);
+  });
+  if(!accList.length){box.innerHTML='<div style="font-size:13px;color:#8a97a8">没有检测到订阅记录</div>';}
+  document.getElementById('mainBtn').disabled=!chosen;
+}
+function pick(el,i){document.querySelectorAll('.pick').forEach(function(x){x.classList.remove('on')});el.classList.add('on');chosen=i;document.getElementById('mainBtn').disabled=false;}
+function pushLines(lines){(lines||[]).forEach(function(l){log(l[0],l[1]||'');});}
+async function callApi(name,arg){
+  var api=pyapi();
+  if(!api||typeof api[name]!=='function'){
+    if(window.__WE_NATIVE__) log('工具还在启动，请稍等两秒再点一次。','tip');
+    else log('当前是界面预览，按钮不会真的执行。正式使用请双击 we-cleaner.exe。','dim');
+    return {ok:false};
+  }
+  try{
+    var job=(arg===undefined)?api[name]():api[name](arg);
+    var r=await withTimeout(job,90000);
+    if(r===null){
+      log('这一步用时太长，已停止等待。','tip');
+      info('时间有点久','操作没有返回结果。建议重新打开工具确认状态，文件可能已经处理完。');
+      return {ok:false};
+    }
+    pushLines(r.lines);
+    if(r.state)render(r.state);
+    if(r.error)info('提示',r.error);
+    else if(r.done)info('完成',r.done);
+    return r;
+  }catch(e){log('出错了：'+e,'tip');info('出错',String(e));return {ok:false};}
+}
+async function refresh(){await callApi('refresh');}
+async function exitSteam(){
+  if(busy)return;
+  if(!await ask('退出 Steam','帮你正常退出 Steam（不会强杀、不会丢下载）。\n确定吗？','退出 Steam'))return;
+  setBusy(true);try{await callApi('exit_steam');}finally{setBusy(false);}
+}
+async function startSteam(){
+  if(busy)return;
+  if(!await ask('启动 Steam','现在启动 Steam？','启动'))return;
+  setBusy(true);try{await callApi('start_steam');}finally{setBusy(false);}
+}
+async function clean(){
+  if(busy)return;
+  if(!chosen){info('先选一下','请先在上面点选「你自己的账号」。');return;}
+  var mine=accList[chosen-1],other=0;
+  accList.forEach(function(a,i){if(i+1!==chosen)other+=a.count;});
+  var ok=await ask('确认清理','将删除其他账号的 '+other+' 条记录，\n保留你自己的 '+mine.count+' 条。\n\n会自动备份，随时可以还原。','开始清理');
+  if(!ok)return;
+  setBusy(true);try{await callApi('clean',chosen);}finally{setBusy(false);}
+}
+async function clearCache(){
+  if(busy)return;
+  var ok=await ask('确认清缓存','只清理 Wallpaper Engine（431960）的下载缓存。\n\n不会动其他游戏的缓存，也不会删已经装好的壁纸。\n会送进回收站（如需找回请到回收站还原）。\n\n删除文件时 360 / 管家等安全软件可能弹窗询问，选「允许」即可；这不是病毒，工具不联网、不动系统文件。\n按钮会走秒，请不要关闭窗口。','清掉它');
+  if(!ok)return;
+  setBusy(true);try{await callApi('clear_cache');}finally{setBusy(false);}
+}
+async function restore(){
+  if(busy)return;
+  var ok=await ask('还原备份acf文件','确定吗？','还原');
+  if(!ok)return;
+  setBusy(true);try{await callApi('restore');}finally{setBusy(false);}
+}
+async function uninstall(){
+  if(busy)return;
+  var ok=await ask('卸载工具','会删掉工具自己的文件。\n\n你之前生成的备份文件会保留，不会被删。','卸载');
+  if(!ok)return;
+  await callApi('uninstall');
+}
+var booted=false, apiReady=false;
+function bootOnce(){
+  if(booted)return;booted=true;
+  var b=window.__WE_BOOT__;
+  if(!b)return;
+  pushLines(b.lines);
+  if(b.state)render(b.state);
+  if(b.error)info('提示',b.error);
+  else if(b.done)info('完成',b.done);
+}
+function markReady(){apiReady=true;}
+function previewMode(){
+  document.getElementById('acfText').textContent='界面预览（未连接工具程序）';
+  document.getElementById('cacheSize').textContent='—';
+  log('这是界面预览，只能看外观；点按钮不会执行任何操作。','dim');
+  log('正式使用请双击 we-cleaner.exe。','dim');
+}
+var NOTICE_TEXT=
+  '1. 改配置前 Steam 要完全退出，工具会自己检查，也能点「一键退出 Steam」。\n'+
+  '2. 360 / 电脑管家弹窗时选「允许」——不联网、不改云端订阅，不是病毒。\n'+
+  '3. 每次改动自动备份，出错点「还原备份acf文件」；清掉的下载缓存在回收站，工具不负责还原。\n'+
+  '4. 偶尔点 X 后进程会多等几秒才退出；窗口消失就说明关好了，不用管。';
+function markNotice(){
+  var api=pyapi();
+  if(api&&typeof api.notice_seen==='function'){try{api.notice_seen();}catch(e){}}
+}
+function showNotice(){
+  modal('使用前请看一眼',NOTICE_TEXT,function(){markNotice();},'知道了',false);
+}
+if(window.__WE_NATIVE__){
+  // 首屏用 Python 预先嵌好的数据，不等 pywebview 注入，杜绝启动竞态
+  bootOnce();
+  var b=window.__WE_BOOT__||{};
+  if(b.hint){
+    setTimeout(function(){
+      info('上次自动关闭','上次工具因为「'+b.hint+'」自动关闭了。\n\n你的文件没有被改动，这次可以正常用。','知道了');
+    },300);
+  }else if(b.show_notice){
+    setTimeout(showNotice,300);
+  }
+  window.addEventListener('pywebviewready',markReady);
+  (function wait(n){
+    var api=pyapi();
+    if(api){
+      markReady();
+      if(typeof api.ready==='function'){try{api.ready();}catch(e){}}
+      return;
+    }
+    if(n>0){setTimeout(function(){wait(n-1);},200);return;}
+    log('按钮接口没有连上。如果点击没反应，请关闭窗口后重新打开。','tip');
+  })(150);
+}else{
+  previewMode();
+}
+</script>
+</body>
+</html>

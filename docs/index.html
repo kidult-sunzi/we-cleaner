@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小红车清理工具 · 下载</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--blue:#2f7de1;--blue-d:#2668bd;--ink:#1f2937;--sub:#5a6a7c;--line:#e1e7ef;--bg:#eef2f7}
+body{background:var(--bg);color:var(--ink);font-family:"Microsoft YaHei","PingFang SC",-apple-system,sans-serif;
+     line-height:1.7;padding:32px 16px 64px}
+.wrap{max-width:680px;margin:0 auto}
+header{text-align:center;margin-bottom:28px}
+h1{font-size:26px;letter-spacing:.5px}
+.tag{color:var(--sub);font-size:14px;margin-top:8px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-bottom:16px;
+      box-shadow:0 2px 10px rgba(20,40,70,.04)}
+.card h2{font-size:15px;color:var(--sub);margin-bottom:14px;font-weight:700}
+.dl{display:block;text-align:center;background:var(--blue);color:#fff;text-decoration:none;
+    padding:15px;border-radius:9px;font-size:17px;font-weight:700;letter-spacing:1px;transition:.15s}
+.dl:hover{background:var(--blue-d)}
+.dl small{display:block;font-size:12px;font-weight:400;opacity:.85;letter-spacing:0;margin-top:4px}
+.mirror{display:flex;gap:10px;margin-top:10px}
+.mirror a{flex:1;text-align:center;text-decoration:none;color:var(--sub);font-size:13px;
+          border:1px solid var(--line);border-radius:8px;padding:10px;transition:.15s}
+.mirror a:hover{border-color:var(--blue);color:var(--blue)}
+.fileinfo{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12.5px;color:var(--sub);margin-top:14px}
+.fileinfo b{color:var(--ink);font-weight:600}
+.hash{font-family:Consolas,monospace;font-size:11.5px;word-break:break-all;color:var(--sub);margin-top:6px}
+.steps{counter-reset:s;list-style:none}
+.steps li{counter-increment:s;position:relative;padding-left:34px;margin-bottom:12px;font-size:14px}
+.steps li::before{content:counter(s);position:absolute;left:0;top:2px;width:22px;height:22px;
+  background:#eaf2fc;color:var(--blue);border-radius:50%;font-size:12px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+.warn{background:#fff8e8;border:1px solid #f3e0b8;border-radius:9px;padding:14px 16px;font-size:13px;color:#7a5a12}
+.warn b{color:#8a5b00}
+details{font-size:13.5px;color:var(--sub)}
+summary{cursor:pointer;color:var(--blue);font-size:13.5px;margin-bottom:8px}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+.tbl td{padding:8px 0;border-bottom:1px solid #f0f3f7;vertical-align:top}
+.tbl td:first-child{color:var(--sub);width:110px}
+footer{text-align:center;font-size:12px;color:#9aa7b5;margin-top:28px;line-height:2}
+footer a{color:#8fa3ba}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>小红车清理工具</h1>
+    <div class="tag">多账号共用一台电脑后，把别人订阅的壁纸记录清干净</div>
+  </header>
+
+  <div class="card">
+    <h2>下载</h2>
+    <a class="dl" href="https://github.com/USER/we-cleaner/releases/latest/download/we-cleaner.exe">
+      下载 we-cleaner.exe
+      <small>Windows 10 / 11 · 64 位 · 13 MB · 双击即用</small>
+    </a>
+    <div class="mirror">
+      <a href="https://github.com/USER/we-cleaner/releases">历史版本</a>
+      <a href="LANZOU_LINK">蓝奏云备用</a>
+      <a href="https://github.com/USER/we-cleaner">源代码</a>
+    </div>
+    <div class="fileinfo">
+      <span>版本 <b>1.0.0</b></span>
+      <span>大小 <b>13.03 MB</b></span>
+      <span>更新 <b>2026-11-06</b></span>
+      <span>无需安装 Python</span>
+    </div>
+    <div class="hash">SHA256：a917d91db7ab0006cd668093045847b1795af8ceecc70db769651a80e091856b</div>
+  </div>
+
+  <div class="card">
+    <h2>怎么用</h2>
+    <ol class="steps">
+      <li>双击打开。Steam 正在运行的话，点一下「一键退出 Steam」——工具也会自动帮你退。</li>
+      <li>在上面点一下<b>你自己的账号</b>（显示昵称、壁纸数量、账号尾号，不用记数字）。</li>
+      <li>点蓝色按钮「一键清理」，确认一次。完成后可以点「一键启动 Steam」开回去。</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>它会做什么、不会做什么</h2>
+    <table class="tbl">
+      <tr><td>会做</td><td>删掉 acf 里其他账号的订阅记录；清 431960 的下载缓存（送回收站）</td></tr>
+      <tr><td>不会做</td><td>不删壁纸文件、不改云端订阅、不改 Steam 程序、不读取账号密码</td></tr>
+      <tr><td>网络</td><td><b>完全不联网</b>，没有上传，没有统计</td></tr>
+      <tr><td>安全网</td><td>每次修改前自动备份，界面上有「还原备份acf文件」随时回退</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="warn">
+      <b>第一次打开可能被拦。</b> exe 没有代码签名，Windows 可能弹「已保护你的电脑」，杀软也可能误报。
+      点「更多信息 → 仍要运行」即可。执行清理时 360 等会弹「是否允许删除文件」，选允许。
+      想核对文件是否被改动，比对上面的 SHA256。
+      <div style="margin-top:8px"><a href="false-positive.md" style="color:#8a5b00">详细说明</a></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>它到底改了什么？（给懂的人看）</summary>
+      <p style="margin-top:8px">
+        只改 <code>SteamLibrary\steamapps\workshop\appworkshop_431960.acf</code> 里的
+        <code>WorkshopItemDetails</code> 条目：按 <code>subscribedby</code> 字段判断归属，
+        删掉非主账号的条目，保留你自己的。Steam 生成的 acf 顶层本身多一个 <code>}</code>，
+        所以校验用的是「删除前后括号差值守恒」，不是绝对配平。写入前会检查 Steam 进程、删除条数、
+        结构是否合法，任一异常立即中止、文件不动。
+      </p>
+      <p style="margin-top:8px">
+        清缓存走 Windows 系统接口送回收站（非永久删除），且只在本地固定磁盘上工作——
+        移动硬盘和网络盘会被拦下，避免变成不可恢复的删除。
+      </p>
+    </details>
+  </div>
+
+  <footer>
+    第三方非官方工具，与 Valve / Wallpaper Engine 无关 · MIT 许可<br>
+    <a href="https://github.com/USER/we-cleaner">源码</a> ·
+    <a href="https://github.com/USER/we-cleaner/issues">反馈</a> ·
+    <a href="false-positive.md">误报说明</a>
+  </footer>
+
+</div>
+</body>
+</html>

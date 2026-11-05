@@ -1,0 +1,6 @@
+# 构建环境锁定（pip install -r requirements.txt）
+# 这三个版本是本项目实际验证过的组合；不锁版本换机器重建可能拉到不兼容的新版
+# （pywebview 改过 webview.start() 行为，PyInstaller 改过 hooks）。
+pywebview==6.2.1
+pyinstaller==6.22.3
+pythonnet==3.2.1
