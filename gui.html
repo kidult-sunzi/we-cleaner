@@ -83,14 +83,15 @@ body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;c
 
     <button class="btn main" id="mainBtn" disabled onclick="clean()">一 键 清 理（推荐）</button>
     <div class="subrow">
-      <button class="btn" onclick="exitSteam()">一键退出 Steam</button>
-      <button class="btn" onclick="startSteam()">一键启动 Steam</button>
+      <button class="btn" disabled onclick="exitSteam()">一键退出 Steam</button>
+      <button class="btn" disabled onclick="startSteam()">一键启动 Steam</button>
     </div>
     <div class="subrow">
-      <button class="btn" onclick="clearCache()">只清下载缓存</button>
-      <button class="btn" onclick="restore()">还原备份acf文件</button>
-      <button class="btn" onclick="uninstall()">卸载本工具</button>
+      <button class="btn" disabled onclick="clearCache()">只清下载缓存</button>
+      <button class="btn" disabled onclick="restore()">还原备份acf文件</button>
+      <button class="btn" disabled onclick="uninstall()">卸载本工具</button>
     </div>
+    <div id="bootTip" style="font-size:13px;color:#8a97a8;text-align:center;margin-top:8px">正在启动，按钮马上就能用…</div>
 
     <div class="card" style="margin-top:13px;margin-bottom:0">
       <h2>运行日志</h2>
@@ -157,8 +158,7 @@ function setBusy(b){
     if(_tick){clearInterval(_tick);_tick=null;}
     m.textContent='一 键 清 理（推荐）';
   }
-  m.disabled=b||!chosen;
-  document.querySelectorAll('.subrow .btn').forEach(function(x){x.disabled=b;});
+  syncButtons();
 }
 function render(st){
   st0=st;
@@ -182,11 +182,13 @@ function render(st){
     box.appendChild(el);
   });
   if(!accList.length){box.innerHTML='<div style="font-size:13px;color:#8a97a8">没有检测到订阅记录</div>';}
-  document.getElementById('mainBtn').disabled=!chosen;
+  syncButtons();
 }
-function pick(el,i){document.querySelectorAll('.pick').forEach(function(x){x.classList.remove('on')});el.classList.add('on');chosen=i;document.getElementById('mainBtn').disabled=false;}
+function pick(el,i){document.querySelectorAll('.pick').forEach(function(x){x.classList.remove('on')});el.classList.add('on');chosen=i;syncButtons();}
 function pushLines(lines){(lines||[]).forEach(function(l){log(l[0],l[1]||'');});}
 async function callApi(name,arg){
+  // 最后一道闸：即使按钮被绕过，通道没就绪也绝不发起跨进程调用
+  if(!apiReady){log('工具还在启动，请稍等一下再点。','tip');return {ok:false};}
   var api=pyapi();
   if(!api||typeof api[name]!=='function'){
     if(window.__WE_NATIVE__) log('工具还在启动，请稍等两秒再点一次。','tip');
@@ -256,7 +258,14 @@ function bootOnce(){
   if(b.error)info('提示',b.error);
   else if(b.done)info('完成',b.done);
 }
-function markReady(){apiReady=true;}
+function syncButtons(){
+  // 通道没连上之前，任何按钮都不许点；连上后主按钮还要等选账号
+  document.querySelectorAll('.subrow .btn').forEach(function(x){x.disabled=!apiReady||busy;});
+  document.getElementById('mainBtn').disabled=(!apiReady||!chosen||busy);
+  var tip=document.getElementById('bootTip');
+  if(tip)tip.style.display=apiReady?'none':'';
+}
+function markReady(){apiReady=true;syncButtons();}
 function previewMode(){
   document.getElementById('acfText').textContent='界面预览（未连接工具程序）';
   document.getElementById('cacheSize').textContent='—';
@@ -286,17 +295,34 @@ if(window.__WE_NATIVE__){
   }else if(b.show_notice){
     setTimeout(showNotice,300);
   }
-  window.addEventListener('pywebviewready',markReady);
-  (function wait(n){
+  // 只在「真的跟后台握上手」之后才放行按钮。
+  // 判据不是「api 对象出现了」，也不是某个页面事件——这次卡死时连 loaded 事件
+  // 都没触发。只有 api.ready() 真正返回才点亮；握手失败/超时就明确提示重开，
+  // 绝不静默让按钮变可点（那时一点，跨进程调用会挂死整个 WebView2 界面）。
+  var handshakeTried=false;
+  function bootFail(){
+    var tip=document.getElementById('bootTip');
+    if(tip){tip.textContent='没启动好，请关掉窗口重新打开。';tip.style.color='#b45309';}
+    log('按钮接口没有连上，请关闭窗口后重新打开。','tip');
+  }
+  function tryHandshake(){
+    if(apiReady||handshakeTried)return;
     var api=pyapi();
-    if(api){
-      markReady();
-      if(typeof api.ready==='function'){try{api.ready();}catch(e){}}
-      return;
-    }
+    if(!api||typeof api.ready!=='function')return;
+    handshakeTried=true;
+    try{
+      withTimeout(api.ready(),10000).then(function(r){
+        if(r&&r.ok)markReady();else bootFail();
+      },bootFail);
+    }catch(e){bootFail();}
+  }
+  window.addEventListener('pywebviewready',tryHandshake);
+  (function wait(n){
+    if(apiReady)return;
+    tryHandshake();
     if(n>0){setTimeout(function(){wait(n-1);},200);return;}
-    log('按钮接口没有连上。如果点击没反应，请关闭窗口后重新打开。','tip');
-  })(150);
+    if(!apiReady)bootFail();
+  })(75);
 }else{
   previewMode();
 }

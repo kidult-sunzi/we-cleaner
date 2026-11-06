@@ -545,8 +545,9 @@ class Api:
     # ---------- 启动握手 ----------
     @safe
     def ready(self):
-        """前端确认自己活了；30 秒没收到就由 _boot_guard 自动收尾。"""
+        """前端真正握上手才调到这里；成功后界面才放行按钮。"""
         BOOT_READY.set()
+        diag('HANDSHAKE ok, buttons enabled')
         return {'ok': True}
 
     # ---------- 首次使用注意事项 ----------
@@ -842,7 +843,9 @@ def main():
                                    width=win_w, height=win_h, resizable=False)
     api.window = window
     window.events.closing += _on_closing
-    # 页面加载完成由 pywebview 自己触发，比依赖 JS 调 api.ready() 可靠得多
+    # 页面加载完成由 pywebview 自己触发，比依赖 JS 调 api.ready() 可靠得多。
+    # 注意：这里只记「页面加载了」，不负责放行按钮。按钮是否可用由前端
+    # 真正握手成功（api.ready() 返回）决定，避免页面事件没触发就卡在灰按钮状态。
     def _on_loaded():
         BOOT_READY.set()
         diag('PAGE loaded')

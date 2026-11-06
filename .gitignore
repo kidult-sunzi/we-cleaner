@@ -22,3 +22,6 @@ Release正文.md
 _bgcheck.py
 push.bat
 push-force.bat
+抓栈.bat
+stack_*.txt
+_verify/
