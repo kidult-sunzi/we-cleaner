@@ -48,7 +48,7 @@ footer a{color:#8fa3ba}
 
   <header>
     <h1>小红车清理工具</h1>
-    <div class="tag">多账号共用一台电脑后，把别人订阅的壁纸记录清干净</div>
+    <div class="tag">登过别人的 Steam 号之后，硬盘少了几十 G，小红车里却看不见</div>
   </header>
 
   <div class="card">
@@ -81,6 +81,19 @@ footer a{color:#8fa3ba}
       <li>在上面点一下<b>你自己的账号</b>（显示昵称、壁纸数量、账号尾号，不用记数字）。</li>
       <li>点蓝色按钮「一键清理」，确认一次。完成后可以点「一键启动 Steam」开回去。</li>
     </ol>
+  </div>
+
+  <div class="card">
+    <h2>硬盘里的空间去哪了</h2>
+    <table class="tbl">
+      <tr><td>起因</td><td>这台电脑登过别人的 Steam 账号（代练、借号、二手整机）。Steam 会把<b>这个账号订阅的创意工坊内容</b>也下载到本机</td></tr>
+      <tr><td>为什么看不见</td><td>小红车只显示<b>你当前登录账号</b>的订阅列表，别人的那些不在里面，所以软件里一切正常</td></tr>
+      <tr><td>为什么删了还有</td><td>订阅记录还留在 <code>appworkshop_431960.acf</code> 里。你把文件夹删掉，Steam 一校验完整性就以为文件丢了，<b>又下一遍</b></td></tr>
+      <tr><td>所以要清什么</td><td>清的是<b>那条记录</b>，不是文件。记录没了，Steam 才不会继续下</td></tr>
+    </table>
+    <div style="font-size:13px;color:#6b7280;margin-top:8px">
+      以后再登别人的号，还会再下一遍——到时候再点一次就行，这个工具不是一次性的。
+    </div>
   </div>
 
   <div class="card">
