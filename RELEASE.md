@@ -11,7 +11,7 @@
 | **GitHub 仓库** | 源码、`README.md`、`LICENSE`(MIT)、`docs/false-positive.md`、`SHA256SUMS.txt` | 可信背书、申诉材料、版本记录 |
 | **GitHub Release** | `we-cleaner.exe` + `we-cleaner.exe.sha256`（再传一份不带版本号的别名） | 正式版、校验值 |
 | **Gitee / GitCode** | 仓库镜像 + 发行版 | 国内可访问的源码与下载 |
-| **蓝奏云 / 123 云盘** | **同一个 exe**（13 MB，远低于免费版 100 MB 上限） | 视频简介的**主下载**（免登录、不限速） |
+| **蓝奏云 / 123 云盘** | **同一个 exe**（13 MB，远低于免费版 100 MB 上限）<br>蓝奏云已建：`https://wwbtf.lanzouw.com/iTg8t4euxnyj` 提取码 `f2ke`（实测免登录、免客户端、点「下载」直接落盘） | 视频简介的**备用下载**（GitHub 打不开时用） |
 | **视频简介** | 一个「下载页」链接，不是裸网盘/裸 exe 链接 | 换网盘不用改视频，观众有地方看说明 |
 
 下载页可以是 GitHub Pages、Gitee Pages，或 B 站专栏。页上必须有：工具截图、三个下载入口、SHA256、误报说明链接。
