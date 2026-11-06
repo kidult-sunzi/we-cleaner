@@ -2,7 +2,8 @@
 """
 小红车清理工具 · 图形界面主程序（pywebview）
 
-双击打开 → 点选自己的账号 → 点按钮。所有操作只改本地 acf / 431960 下载缓存。
+双击打开 → 点选自己的账号 → 点按钮。工具只改本地 acf；
+431960 下载缓存由用户在资源管理器里自己删除，工具只负责打开文件夹。
 不删壁纸文件、不改云端订阅、不联网、不改 Steam 程序文件。
 
 打包（build.py 会生成图标/版本信息并调用 PyInstaller，勿手敲命令漏 DLL）：
@@ -180,14 +181,6 @@ def webview2_ok():
     return False, ''
 
 
-def drive_type(path):
-    """盘符类型：3 = 本地固定磁盘（Windows 回收站只支持这个）。"""
-    try:
-        root = os.path.splitdrive(os.path.abspath(path))[0] + '\\'
-        return int(ctypes.windll.kernel32.GetDriveTypeW(root))
-    except Exception:
-        return 0
-
 
 def fit_window(want_w=800, want_h=740):
     """按屏幕工作区收缩窗口。
@@ -233,49 +226,6 @@ def steam_exe():
             return p
     return None
 
-
-def recycle(path):
-    """送回收站（可还原），不直接抹掉。
-
-    用 Win32 SHFileOperationW 直接调用系统外壳，不启动脚本解释器。
-    之前用 PowerShell 执行删除，会被 360 等主动防御判成
-    「陌生 exe 借脚本解释器批量删文件」（LOLBin 特征）而拦截。
-    """
-    if not os.path.exists(path):
-        return True, ''
-    from ctypes import wintypes
-
-    class SHFILEOPSTRUCTW(ctypes.Structure):
-        _fields_ = [
-            ('hwnd', wintypes.HWND),
-            ('wFunc', wintypes.UINT),
-            ('pFrom', ctypes.c_void_p),
-            ('pTo', ctypes.c_void_p),
-            ('fFlags', ctypes.c_uint16),
-            ('fAnyOperationsAborted', wintypes.BOOL),
-            ('hNameMappings', ctypes.c_void_p),
-            ('lpszProgressTitle', ctypes.c_wchar_p),
-        ]
-
-    try:
-        shell32 = ctypes.windll.shell32
-        shell32.SHFileOperationW.argtypes = [ctypes.POINTER(SHFILEOPSTRUCTW)]
-        shell32.SHFileOperationW.restype = ctypes.c_int
-        # pFrom 需要「双 \0 结尾」的路径列表
-        buf = ctypes.create_unicode_buffer(os.path.abspath(path) + '\0')
-        op = SHFILEOPSTRUCTW()
-        op.hwnd = None
-        op.wFunc = 3                       # FO_DELETE
-        op.pFrom = ctypes.cast(buf, ctypes.c_void_p)
-        op.pTo = None
-        # SILENT | NOCONFIRMATION | ALLOWUNDO | NOERRORUI
-        op.fFlags = 0x0004 | 0x0010 | 0x0040 | 0x0400
-        rc = shell32.SHFileOperationW(ctypes.byref(op))
-        if rc == 0 and not op.fAnyOperationsAborted:
-            return True, ''
-        return False, '系统返回码 %s（可能被安全软件阻止）' % rc
-    except Exception as e:
-        return False, str(e)
 
 
 def safe(fn):
@@ -340,8 +290,9 @@ class Api:
             folder = os.path.join(dl, '431960')
             if os.path.isdir(folder):
                 self.cache_targets.append(folder)
-            self.cache_targets += [p for p in glob.glob(os.path.join(dl, '431960*.patch'))
-                                   if os.path.isfile(p)]
+            # 刻意不碰 state_431960_431960_*.patch：那是 Steam 的下载状态记录，
+            # 订阅记录还在时删掉它们可能让 Steam 重新校验、重新下载。
+            # 这些文件一共才几 KB，删了也没有任何收益。
         # 遍历缓存目录 + 全盘找库都很慢，只在扫描时算一次，别让每次点按钮都重来
         self._cache_size = sum(size_of(p) for p in self.cache_targets)
         self._libs = len(found) if found else 0
@@ -483,48 +434,50 @@ class Api:
         return self._result(False, lines, self._state(),
                             error='校验没通过，已中止，文件未改动。详情看日志。')
 
-    # ---------- 清缓存 ----------
+    # ---------- 打开缓存文件夹（由用户自己删） ----------
     @safe
-    def clear_cache(self):
+    def open_cache_folder(self):
+        """打开下载缓存所在目录并选中 431960 文件夹，删除交给用户手动完成。
+
+        360 的反勒索／文档保护规则盯的是「陌生进程删图片类文件」——缓存里
+        159 个文件有 106 个是 jpg/mp4/gif。换任何删除接口都绕不开：实测
+        SHFileOperationW 与系统外壳的 delete verb 都会被弹窗询问。
+        所以工具不再删除任何缓存文件，只把文件夹打开；删除由资源管理器
+        发起，用户看得见、也不会被安全软件拦。
+        """
         LOG.clear()
         lines = []
-        if core.steam_running():
-            return self._result(False, [['Steam 正在运行，请先退出', 'tip']], self._state(),
-                                error='请先退出 Steam，再清缓存。')
-        if not self.cache_targets:
-            return self._result(True, [['没有找到 431960 下载缓存', 'ok']], self._state(),
-                                done='没有需要清理的下载缓存。')
-        # 回收站只支持本地固定磁盘：U 盘 / 移动硬盘 / 网络盘上带 FOF_ALLOWUNDO 删除
-        # 会变成永久删除，与「可还原」的承诺不符，直接拦下来。
-        odd = [(p, drive_type(p)) for p in self.cache_targets if drive_type(p) != 3]
-        if odd:
-            kind = {2: '可移动磁盘', 4: '网络驱动器', 5: '光驱', 6: '内存盘'}.get(odd[0][1],
-                                                                        '非本地固定磁盘')
-            diag('CLEAR_CACHE blocked: drive type %s' % odd[0][1])
-            return self._result(False, [
-                ['下载缓存不在本地固定磁盘（%s）' % kind, 'tip'],
-                ['这种位置删文件不进回收站，会永久删除，已阻止', 'tip'],
-            ], self._state(),
-                error=('下载缓存所在的磁盘是「%s」。\n\n'
-                       '在这种位置删除文件不会进回收站，删了就找不回来，'
-                       '所以工具没有删除任何东西。\n\n'
-                       '如果确实要清，请自己手动删掉这个文件夹；'
-                       '或者把 Steam 库放到本地硬盘再用本工具。' % kind))
-        total = sum(size_of(p) for p in self.cache_targets)
-        lines.append(['只清理 431960 相关：%d 项，共 %s' % (len(self.cache_targets), human(total)), 'tip'])
-        for p in self.cache_targets:
-            ok, err = recycle(p)
-            lines.append([('已送回收站：' + os.path.basename(p)) if ok else ('失败：' + err),
-                          'ok' if ok else 'tip'])
+        steamapps = os.path.dirname(os.path.dirname(self.acf)) if self.acf else None
+        dl = os.path.join(steamapps, 'workshop', 'downloads') if steamapps else None
+        folder = os.path.join(dl, '431960') if dl else None
+        if not dl or not os.path.isdir(dl):
+            return self._result(False, [['没找到下载缓存所在的文件夹', 'tip']],
+                                self._state(),
+                                error='没找到下载缓存目录，请检查 Steam 库路径。')
+        target = folder if os.path.isdir(folder) else dl
+        opened = False
+        try:
+            # /select, 会打开父目录并选中该文件夹，用户直接按 Delete 即可
+            subprocess.Popen(['explorer.exe', '/select,' + os.path.normpath(target)])
+            opened = True
+        except Exception:
+            try:
+                os.startfile(dl)
+                opened = True
+            except Exception as e:
+                diag('OPEN_FOLDER failed: %r' % e)
+        if not opened:
+            return self._result(False, [['打开文件夹失败', 'tip']], self._state(),
+                                error=('没能打开文件夹。请自己到 Steam 库的 '
+                                       'workshop\\downloads 里删除 431960。'))
+        if os.path.isdir(folder):
+            lines.append(['已打开文件夹并选中 431960，按 Delete 删掉它即可', 'ok'])
+            lines.append(['只删 431960 这个文件夹；旁边的配置文件和 state_*.patch 不要动', 'tip'])
+        else:
+            lines.append(['已打开 downloads 文件夹，目前没有 431960 下载缓存', 'ok'])
         lines += LOG.drain()
-        self._scan()
-        good = all(not l[0].startswith('失败') for l in lines)
-        return self._result(good, lines, self._state(),
-                            done=('缓存已移到回收站。\n\n'
-                                  '注意：磁盘空间要清空回收站之后才会真正释放，'
-                                  '现在占用还没变少。\n如需找回，打开回收站还原即可。')
-                            if good else None,
-                            error='部分文件没能清除，详情看日志。' if not good else None)
+        # 不返回 done：打开文件夹就是终点，不再弹「完成」窗口
+        return self._result(True, lines, self._state())
 
     # ---------- 还原 ----------
     @safe
@@ -617,7 +570,7 @@ def selftest():
               (st['acf_ok'], st['steam'], st['cache'], st['webview2'], st['libs']))
     out.write('selftest: accounts=%s\n' %
               [(a['name'][:2] + '***', a['count'], a['tail']) for a in st['accounts']])
-    for m in ['refresh', 'exit_steam', 'start_steam', 'clean', 'clear_cache', 'restore',
+    for m in ['refresh', 'exit_steam', 'start_steam', 'clean', 'open_cache_folder', 'restore',
               'uninstall', 'notice_seen', 'ready']:
         assert callable(getattr(api, m)), m
     out.write('selftest: all 9 api methods present\n')
