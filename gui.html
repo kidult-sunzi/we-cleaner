@@ -238,7 +238,28 @@ async function clearCache(){
     '只删 431960 这一个文件夹；旁边的配置文件和 state_*.patch 不要动。',
     '点击前往');
   if(!ok)return;
-  busy=true;try{await callApi('open_cache_folder');}finally{busy=false;}
+  busy=true;
+  try{await callApi('open_cache_folder');}finally{busy=false;syncButtons();}
+  watchCacheSize();
+}
+var cacheWatch=null,cacheWatchN=0;
+function watchCacheSize(){
+  if(cacheWatch){clearInterval(cacheWatch);cacheWatch=null;}
+  cacheWatchN=0;
+  cacheWatch=setInterval(async function(){
+    cacheWatchN++;
+    try{
+      var api=pyapi();
+      if(!api||typeof api.cache_status!=='function'){clearInterval(cacheWatch);cacheWatch=null;return;}
+      var r=await api.cache_status();
+      if(r&&r.cache){
+        document.getElementById('cacheSize').textContent=r.cache;
+        document.getElementById('cacheDot').className='dot'+(r.cache.indexOf('0 GB')===0?'':' warn');
+        if(r.cache.indexOf('0 GB')===0){clearInterval(cacheWatch);cacheWatch=null;return;}
+      }
+    }catch(e){}
+    if(cacheWatchN>=90&&cacheWatch){clearInterval(cacheWatch);cacheWatch=null;}
+  },2000);
 }
 async function restore(){
   if(busy)return;

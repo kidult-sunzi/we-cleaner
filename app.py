@@ -479,6 +479,20 @@ class Api:
         # 不返回 done：打开文件夹就是终点，不再弹「完成」窗口
         return self._result(True, lines, self._state())
 
+    def cache_status(self):
+        """前端轮询用：只重算 431960 缓存大小，不碰 acf、不写日志、不弹窗。
+
+        删除是在资源管理器里由用户手动完成的，工具感知不到那一刻，
+        所以点「点击前往」之后由前端每隔两秒问一次，删完即更新界面。
+        """
+        steamapps = os.path.dirname(os.path.dirname(self.acf)) if self.acf else None
+        dl = os.path.join(steamapps, 'workshop', 'downloads') if steamapps else None
+        folder = os.path.join(dl, '431960') if dl else None
+        self.cache_targets = [folder] if folder and os.path.isdir(folder) else []
+        self._cache_size = sum(size_of(p) for p in self.cache_targets)
+        return {'cache': human(self._cache_size) if self._cache_size
+                else '0 GB（已清理）'}
+
     # ---------- 还原 ----------
     @safe
     def restore(self):
@@ -570,10 +584,10 @@ def selftest():
               (st['acf_ok'], st['steam'], st['cache'], st['webview2'], st['libs']))
     out.write('selftest: accounts=%s\n' %
               [(a['name'][:2] + '***', a['count'], a['tail']) for a in st['accounts']])
-    for m in ['refresh', 'exit_steam', 'start_steam', 'clean', 'open_cache_folder', 'restore',
-              'uninstall', 'notice_seen', 'ready']:
+    for m in ['refresh', 'exit_steam', 'start_steam', 'clean', 'open_cache_folder',
+              'restore', 'uninstall', 'notice_seen', 'ready', 'cache_status']:
         assert callable(getattr(api, m)), m
-    out.write('selftest: all 9 api methods present\n')
+    out.write('selftest: all 10 api methods present\n')
     out.write('selftest: OK\n')
 
 
