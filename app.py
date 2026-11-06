@@ -305,7 +305,10 @@ def safe(fn):
 
 class Api:
     def __init__(self):
-        self.window = None
+        # 必须以下划线开头：pywebview 生成前端接口时会 dir(js_api) 并递归遍历
+        # 所有非下划线属性。若把 Window 对象挂在公开属性上，后台线程 getattr
+        # 窗口属性会要求切回 UI 线程，与 create_window 互等 → 整个界面死锁未响应。
+        self._window = None
         self.acf = None
         self.groups = {}
         self.order = []
@@ -590,10 +593,10 @@ class Api:
             with open(bat, 'w', encoding='ascii', newline='\r\n') as f:
                 f.write('\n'.join(script) + '\n')
             subprocess.Popen(['cmd', '/c', bat], creationflags=0x08000000)
-            if self.window:
+            if self._window:
                 def _close():
                     try:
-                        self.window.destroy()
+                        self._window.destroy()
                     except Exception:
                         pass
                 threading.Timer(1.5, _close).start()
@@ -841,7 +844,7 @@ def main():
     diag('WINDOW size %dx%d' % (win_w, win_h))
     window = webview.create_window(APP_TITLE, html=html, js_api=api,
                                    width=win_w, height=win_h, resizable=False)
-    api.window = window
+    api._window = window
     window.events.closing += _on_closing
     # 页面加载完成由 pywebview 自己触发，比依赖 JS 调 api.ready() 可靠得多。
     # 注意：这里只记「页面加载了」，不负责放行按钮。按钮是否可用由前端
