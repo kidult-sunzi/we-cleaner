@@ -20,8 +20,8 @@ os.chdir(ROOT)
 
 VERSION_TXT = r'''VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 1, 0, 0),
+    prodvers=(1, 1, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -35,12 +35,12 @@ VERSION_TXT = r'''VSVersionInfo(
         '040904b0',
         [StringStruct('CompanyName', 'WE Cleaner'),
          StringStruct('FileDescription', 'Wallpaper Engine Workshop Subscription Cleaner'),
-         StringStruct('FileVersion', '1.0.0.0'),
+         StringStruct('FileVersion', '1.1.0.0'),
          StringStruct('InternalName', 'we-cleaner'),
          StringStruct('LegalCopyright', 'MIT License'),
          StringStruct('OriginalFilename', 'we-cleaner.exe'),
          StringStruct('ProductName', 'WE Cleaner'),
-         StringStruct('ProductVersion', '1.0.0.0')])
+         StringStruct('ProductVersion', '1.1.0.0')])
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]
