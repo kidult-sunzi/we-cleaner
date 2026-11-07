@@ -266,6 +266,8 @@ class Api:
         self.cache_targets = []
         self._cache_size = 0
         self._libs = 0
+        self.overview = {'ok': False}
+        self.orphans = []
 
     # ---------- 扫描 ----------
     def _scan(self):
@@ -296,6 +298,18 @@ class Api:
         # 遍历缓存目录 + 全盘找库都很慢，只在扫描时算一次，别让每次点按钮都重来
         self._cache_size = sum(size_of(p) for p in self.cache_targets)
         self._libs = len(found) if found else 0
+
+        # 每账号订阅清单（userdata）：纯读、不写、失败就静默降级成空
+        try:
+            self.overview = core.read_user_subscriptions(self.acf, self.groups)
+        except Exception:
+            self.overview = {'ok': False}
+
+        # 孤儿目录（磁盘有、acf 没有）：纯读，实测只花 6 毫秒，开机就算
+        try:
+            self.orphans = core.find_orphans(self.acf)
+        except Exception:
+            self.orphans = []
         return self
 
     @staticmethod
@@ -321,6 +335,12 @@ class Api:
             'accounts': accounts,
             'webview2': webview2_ok(),
             'libs': self._libs,
+            'overview': self.overview,
+            'orphans': {
+                'count': len(self.orphans),
+                'size': human(sum(o['size'] for o in self.orphans)) if self.orphans else '',
+                'items': [{'id': o['id'], 'size': human(o['size'])} for o in self.orphans],
+            },
         }
 
     @staticmethod
@@ -335,7 +355,7 @@ class Api:
         lines = []
         if state['acf_ok']:
             lines.append(['已找到配置文件', 'ok'])
-            lines.append(['检测到 %d 个账号，%d 条订阅记录' %
+            lines.append(['配置文件里有 %d 个账号的订阅记录，共 %d 条' %
                           (len(state['accounts']), sum(a['count'] for a in state['accounts'])), ''])
         else:
             lines.append(['没找到 appworkshop_431960.acf，请确认已安装 Wallpaper Engine', 'tip'])
@@ -343,6 +363,14 @@ class Api:
             lines.append(['警告：本机缺少 WebView2 运行库，界面可能无法显示', 'tip'])
         if state['libs'] > 1:
             lines.append(['检测到多个游戏库，当前只处理第一个', 'tip'])
+        ov = state.get('overview') or {}
+        if ov.get('ok') and ov.get('known') and ov.get('others'):
+            lines.append(['这台电脑登过 %d 个 Steam 账号，其中 %d 个不是你的，'
+                          '累计订过 %d 张壁纸' % (ov['logged'], ov['others'], ov['other_sum']), 'tip'])
+        if ov.get('ok') and ov.get('other_in_acf'):
+            lines.append(['⚠ 还有 %d 条别人的订阅记录留在配置里（配置被还原成旧版本、'
+                          '或那个账号再登录一次，这些壁纸会被整批下回来）'
+                          % ov['other_in_acf'], 'warn'])
         return {'ok': True, 'lines': lines, 'state': state}
 
     # ---------- Steam ----------
@@ -425,14 +453,24 @@ class Api:
             lines.append(['没有别的账号记录，已经是干净的', 'ok'])
             return self._result(True, lines, self._state(), done='没有别的账号记录，不用清理。')
         lines.append(['将删除其他账号 %d 条，保留你的 %d 条' % (n, keep), 'tip'])
-        ok = core.apply_changes(self.acf, text, nl, bom, mine, n, ask=False)
+        try:
+            ok = core.apply_changes(self.acf, text, nl, bom, mine, n, ask=False)
+        except core.WriteRefused as e:
+            # 拒写必须原样告诉用户，不能糊成"校验没通过"，更不能当成功
+            lines += LOG.drain()
+            lines.append([e.msg.split('\n')[0], 'warn'])
+            return self._result(False, lines, self._state(), error=e.msg)
         lines += LOG.drain()
         if ok:
             self._scan()
-            return self._result(True, lines, self._state(),
-                                done='清理完成：删除 %d 条，保留 %d 条。\n备份已保存在配置文件旁边。' % (n, keep))
+            res = self._result(
+                True, lines, self._state(),
+                done='清理完成：删除 %d 条，保留 %d 条。\n备份已保存在配置文件旁边。' % (n, keep))
+            # 前端见到 rules 就弹「清理后要注意什么」，而不是普通完成框
+            res['rules'] = True
+            return res
         return self._result(False, lines, self._state(),
-                            error='校验没通过，已中止，文件未改动。详情看日志。')
+                            error='已取消，文件没有改动。')
 
     # ---------- 打开缓存文件夹（由用户自己删） ----------
     @safe
@@ -492,6 +530,68 @@ class Api:
         self._cache_size = sum(size_of(p) for p in self.cache_targets)
         return {'cache': human(self._cache_size) if self._cache_size
                 else '0 GB（已清理）'}
+
+    # ---------- 孤儿目录（只打开，绝不代删） ----------
+    @safe
+    def open_orphan(self, idx):
+        """打开某个孤儿目录并在资源管理器里选中它，删除交给用户按 Delete。
+
+        和下载缓存同理：孤儿里装的也是 jpg/mp4，360 反勒索按"哪个进程在删
+        图片"判定，程序代删必被弹窗。所以这里只打开，不删。
+        实验 001（2026-11-07）已实证：这类目录 Steam 不认识，删了不会重下。
+        """
+        LOG.clear()
+        lines = []
+        try:
+            i = int(idx)
+        except (TypeError, ValueError):
+            i = 0
+        if not self.orphans:
+            return self._result(False, [['没有发现无主残留', 'ok']], self._state(),
+                                error='现在没有可清理的无主残留。')
+        if i < 1 or i > len(self.orphans):
+            return self._result(False, [['编号超出范围', 'tip']], self._state(),
+                                error='请重新点一次「前往删除」。')
+        o = self.orphans[i - 1]
+        path = o['path']
+        if not os.path.isdir(path):
+            self._scan()
+            return self._result(False, [['这个目录已经不在磁盘上了', 'ok']], self._state(),
+                                error='这个目录已经不在了，界面已按最新状态刷新。')
+        opened = False
+        try:
+            subprocess.Popen(['explorer.exe', '/select,' + os.path.normpath(path)])
+            opened = True
+        except Exception:
+            try:
+                os.startfile(path)
+                opened = True
+            except Exception as e:
+                diag('OPEN_ORPHAN failed: %r' % e)
+        if not opened:
+            return self._result(
+                False, [['打开文件夹失败', 'tip']], self._state(),
+                error=('没能打开文件夹。请自己到 Steam 库的 '
+                       'workshop\\content\\431960 里删掉 %s。' % o['id']))
+        lines.append(['已打开并选中 %s，按 Delete 删掉它即可' % o['id'], 'ok'])
+        lines.append(['这个目录 Steam 完全不认识，删了不会重新下载', 'tip'])
+        lines += LOG.drain()
+        return self._result(True, lines, self._state())
+
+    def orphans_status(self):
+        """前端轮询用：只重算孤儿列表，不写日志、不弹窗。
+
+        删除是用户在资源管理器里手动完成的，工具感知不到那一刻，
+        所以点完之后由前端定时问一次，删完即更新界面。
+        """
+        try:
+            self.orphans = core.find_orphans(self.acf)
+        except Exception:
+            pass
+        total = sum(o['size'] for o in self.orphans)
+        return {'count': len(self.orphans),
+                'size': human(total) if total else '',
+                'items': [{'id': o['id'], 'size': human(o['size'])} for o in self.orphans]}
 
     # ---------- 还原 ----------
     @safe
@@ -584,10 +684,20 @@ def selftest():
               (st['acf_ok'], st['steam'], st['cache'], st['webview2'], st['libs']))
     out.write('selftest: accounts=%s\n' %
               [(a['name'][:2] + '***', a['count'], a['tail']) for a in st['accounts']])
-    for m in ['refresh', 'exit_steam', 'start_steam', 'clean', 'open_cache_folder',
-              'restore', 'uninstall', 'notice_seen', 'ready', 'cache_status']:
+    ov = st.get('overview') or {}
+    out.write('selftest: overview ok=%s 登过=%s 别人的号=%s 累计=%s 配置里还剩=%s\n' %
+              (ov.get('ok'), ov.get('logged'), ov.get('others'),
+               ov.get('other_sum'), ov.get('other_in_acf')))
+    orp = st.get('orphans') or {}
+    out.write('selftest: orphans count=%s size=%s ids=%s\n' %
+              (orp.get('count'), orp.get('size'),
+               [i['id'] for i in (orp.get('items') or [])]))
+    methods = ['refresh', 'exit_steam', 'start_steam', 'clean', 'open_cache_folder',
+               'cache_status', 'open_orphan', 'orphans_status',
+               'restore', 'uninstall', 'notice_seen', 'ready']
+    for m in methods:
         assert callable(getattr(api, m)), m
-    out.write('selftest: all 10 api methods present\n')
+    out.write('selftest: api 方法齐全（%d 个）\n' % len(methods))
     out.write('selftest: OK\n')
 
 
@@ -626,10 +736,38 @@ def _working_set_bytes():
     return 0
 
 
+def _rmtree_force(path):
+    """删目录，遇到只读/被占用时去掉只读再试一次。不同 Python 版本回调名不同。"""
+    import stat as _stat
+
+    def _onexc(func, p, exc):
+        try:
+            os.chmod(p, _stat.S_IWRITE)
+            func(p)
+        except Exception:
+            pass
+
+    try:
+        shutil.rmtree(path, onexc=_onexc)
+    except TypeError:
+        shutil.rmtree(path, onerror=lambda f, p, e: _onexc(f, p, e))
+
+
 def cleanup_stale_mei():
     """onefile 每次启动解压到 %TEMP%\\_MEI*，被强退时不清会越堆越多。
 
-    只删「自己上次记录过」的目录，绝不通配扫描，避免误伤别的 PyInstaller 程序。
+    2026-11-07 改（原先有 bug，实测积了 26 个目录 / 0.42 GB）：
+      原实现每次启动把清单**覆盖**成"当前这一个"路径，只记得上一次；
+      而且删除失败被 `ignore_errors=True` 全部吞掉。
+      于是只要有一次删不掉（比如 WebView2 子进程还占着其中的 DLL），
+      那个目录就永远不会再被想起，越积越多。
+
+    现在的做法：
+      - 清单**累积**，最多保留 40 条
+      - 删不掉的**留在清单里**，下次启动再试
+      - 删之前先清只读属性（_rmtree_force）
+      - 失败写 diag，便于以后排查
+    仍然只动清单里记过的路径，绝不通配扫描，避免误伤别的 PyInstaller 程序。
     """
     if not getattr(sys, 'frozen', False):
         return
@@ -641,19 +779,25 @@ def cleanup_stale_mei():
                 old = [x.strip() for x in f if x.strip()]
     except Exception:
         pass
+
+    keep = []
     removed = 0
     for p in old:
         try:
             if os.path.normcase(os.path.abspath(p)) == cur or not os.path.isdir(p):
                 continue
-            shutil.rmtree(p, ignore_errors=True)
-            if not os.path.exists(p):
-                removed += 1
-        except Exception:
-            pass
+            _rmtree_force(p)
+        except Exception as e:
+            diag('cleanup _MEI failed: %r (%r)' % (p, e))
+        if os.path.exists(p):
+            keep.append(p)      # 这次没删掉，留着下回再试
+        else:
+            removed += 1
+
+    keep.append(cur)
     try:
         with open(MEI_LIST, 'w', encoding='utf-8') as f:
-            f.write(cur + '\n')
+            f.write('\n'.join(keep[-40:]) + '\n')
     except Exception:
         pass
     if removed:

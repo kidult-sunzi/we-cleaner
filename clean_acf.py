@@ -94,6 +94,166 @@ def find_acf():
     return found
 
 
+def find_userdata_dirs():
+    """找出所有可能的 Steam/userdata 目录（只读，不会新建任何东西）。
+
+    注意：userdata 在 Steam **安装目录**里，不在游戏库目录里。
+    WE 装在 D:\\SteamLibrary 时，acf 在 D 盘但 userdata 还在 C 盘，所以不能从 acf 推。
+    """
+    cands = []
+    sp = reg_steam_path()
+    if sp:
+        cands.append(os.path.join(sp, 'userdata'))
+    for var in ('ProgramFiles', 'ProgramFiles(x86)'):
+        p = os.environ.get(var)
+        if p:
+            cands.append(os.path.join(p, 'Steam', 'userdata'))
+    for drive in 'CDEFGH':
+        cands.append(drive + ':\\Steam\\userdata')
+
+    out = []
+    for c in cands:
+        c = os.path.normpath(c)
+        if os.path.isdir(c) and c.lower() not in [x.lower() for x in out]:
+            out.append(c)
+    return out
+
+
+def current_account():
+    """当前登录的 accountid。来源 config/loginusers.vdf 的 MostRecent 标记。
+
+    读不到就返回 None —— 绝不能猜，猜错了界面会把别人的号标成"你自己"。
+    """
+    roots = []
+    sp = reg_steam_path()
+    if sp:
+        roots.append(sp)
+    for var in ('ProgramFiles', 'ProgramFiles(x86)'):
+        p = os.environ.get(var)
+        if p:
+            roots.append(os.path.join(p, 'Steam'))
+
+    for r in roots:
+        f = os.path.join(r, 'config', 'loginusers.vdf')
+        if not os.path.isfile(f):
+            continue
+        try:
+            t = open(f, encoding='utf-8', errors='replace').read()
+        except OSError:
+            continue
+        # 按 "\n\t"<steamid64>"\n\t{" 切开，每两段是一组
+        parts = re.split(r'\n\t"(7656\d{13})"\s*\n?\t*\{', t)
+        ids = parts[1::2]
+        bodies = parts[2::2]
+        for sid, body in zip(ids, bodies):
+            if re.search(r'"MostRecent"\s*"1"', body):
+                try:
+                    return str(int(sid) - 76561197960265728)
+                except ValueError:
+                    return None
+        if len(ids) == 1:
+            try:
+                return str(int(ids[0]) - 76561197960265728)
+            except ValueError:
+                return None
+    return None
+
+
+def read_user_subscriptions(acf_path, groups=None):
+    """读 userdata 下每个账号自己的壁纸订阅清单，并和 acf/硬盘交叉核对。
+
+    数据源：<Steam>/userdata/<accountid>/ugc/431960_subscriptions.vdf
+    为什么需要它：acf 会被 Steam 重写，历史账号的条目会被清掉；
+    这份文件是按账号分目录存的，能看出"这台电脑到底有几个号订过壁纸"。
+    详见 docs/约定与实现规则.md 2.6。
+
+    全程只读。任何一步失败都只是让结果变少，绝不抛异常、绝不写文件。
+    """
+    groups = groups or {}
+    owner = {}
+    for acc, items in groups.items():
+        for it in items:
+            owner[str(it[0])] = str(acc)
+
+    mine = current_account()
+
+    # 硬盘上真实存在的内容目录
+    dirs = set()
+    try:
+        steamapps = os.path.dirname(os.path.dirname(os.path.abspath(acf_path)))
+        cdir = os.path.join(steamapps, 'workshop', 'content', '431960')
+        if os.path.isdir(cdir):
+            dirs = set(d for d in os.listdir(cdir) if d.isdigit())
+    except (OSError, TypeError):
+        pass
+
+    meta = account_meta()
+    accounts = []
+    seen = set()
+    for ud in find_userdata_dirs():
+        try:
+            names = sorted(os.listdir(ud))
+        except OSError:
+            continue
+        for name in names:
+            if not name.isdigit() or name in seen:
+                continue
+            seen.add(name)
+            f = os.path.join(ud, name, 'ugc', '431960_subscriptions.vdf')
+            ids, last = set(), ''
+            if os.path.isfile(f):
+                try:
+                    t = open(f, encoding='utf-8', errors='replace').read()
+                    ids = set(re.findall(r'"publishedfileid"\s*"(\d+)"', t))
+                    m = re.search(r'"time_last_updated"\s*"(\d+)"', t)
+                    if m:
+                        ts = int(m.group(1))
+                        if ts > 0:
+                            last = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
+                except (OSError, ValueError):
+                    pass
+            accounts.append({
+                'id': name,
+                'name': meta.get(name, ('', ''))[0] or ('账号 ' + name[-4:]),
+                'subs': len(ids),
+                'last': last,
+                'in_acf': len(ids & set(owner)),
+                'on_disk': len(ids & dirs),
+                '_ids': ids,
+            })
+
+    # 没有登录记录时，退一步认为"订阅清单最近更新"的那个是当前账号；
+    # 仍然判断不出就整体标为"未知"，界面不会把任何人误标成"你自己"
+    if mine not in [a['id'] for a in accounts]:
+        mine = None
+
+    others = [a for a in accounts if a['id'] != mine] if mine else []
+    other_ids = set()
+    for a in others:
+        other_ids |= a['_ids']
+
+    for a in accounts:
+        a['mine'] = (a['id'] == mine)
+        a.pop('_ids', None)
+
+    accounts.sort(key=lambda x: (not x['mine'], -x['subs']))
+
+    return {
+        'ok': bool(accounts),
+        'known': bool(mine),
+        'logged': len(accounts),
+        'subbed': len([a for a in accounts if a['subs'] > 0]),
+        # others 只数"别的号里真的订过壁纸的"，没订过的号不计入，
+        # 否则界面会说出"5 个号订过"这种吓人的错话
+        'others': len([a for a in others if a['subs'] > 0]) if mine else 0,
+        'other_sum': len(other_ids),
+        'other_on_disk': len(other_ids & dirs),
+        'other_in_acf': len(other_ids & set(owner)),
+        'on_disk_total': len(dirs),
+        'accounts': accounts,
+    }
+
+
 def account_meta():
     """从 Steam/userdata/<accountID>/config/localconfig.vdf 读昵称，帮你认出哪个是自己的账号。"""
     meta = {}
@@ -301,43 +461,248 @@ def preview(groups, order, mine):
     return total
 
 
+class WriteRefused(Exception):
+    """拒绝写入。带上人话原因，让界面能原样显示，不要笼统说"校验失败"。
+
+    这条是为 P0 修的：以前 apply_changes 只是 return False，上层分不清
+    "Steam 还在跑所以没写"和"结构校验没过"，于是界面提示对不上真实原因。
+    """
+
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.code = code
+        self.msg = msg
+
+
+def parse_acf(text):
+    """严格解析 KeyValues（acf/vdf）。结构不合法就抛 ValueError。
+
+    取代原来的"花括号差值守恒"校验——那种写法只比较差值，原始文件本身
+    不平衡（比如你 11/6 那个多一个 `}` 的）反而能通过，等于没校验。
+    现在要求：整个文件必须能被完整解析，且解析完不能剩多余 token。
+    """
+    toks = re.findall(r'"([^"]*)"|([{}])', text)
+    if not toks or toks[0][1]:
+        raise ValueError('文件开头不是键名')
+
+    pos = 0
+
+    def block():
+        nonlocal pos
+        d = {}
+        while pos < len(toks):
+            k, v = toks[pos]
+            if v == '}':
+                pos += 1
+                return d
+            if v == '{':
+                raise ValueError('出现没有键名的裸花括号块')
+            pos += 1
+            if pos < len(toks) and toks[pos][1] == '{':
+                pos += 1
+                d[k] = block()
+            elif pos < len(toks):
+                d[k] = toks[pos][0]
+                pos += 1
+            else:
+                raise ValueError('键 %r 之后文件意外结束' % k)
+        raise ValueError('右花括号数量不足，文件被截断')
+
+    pos = 1
+    if pos >= len(toks) or toks[pos][1] != '{':
+        raise ValueError('根键后面没有紧跟 {')
+    pos += 1
+    root = {toks[0][0]: block()}
+    if pos != len(toks):
+        raise ValueError('解析结束后还剩 %d 个符号，说明有多余的 }' % (len(toks) - pos))
+    if len(root) != 1:
+        raise ValueError('顶层键不是唯一的')
+    return root
+
+
+def acf_item_ids(root):
+    """从解析结果里取出"已装/已订阅"的工坊条目 ID 集合。"""
+    aw = root.get('AppWorkshop') or {}
+    ids = set()
+    for sec in ('WorkshopItemsInstalled', 'WorkshopItemDetails'):
+        blk = aw.get(sec)
+        if isinstance(blk, dict):
+            ids |= set(k for k in blk if str(k).isdigit())
+    return ids
+
+
+def section_ids(root, section):
+    """取某个区块下的纯数字条目 ID。区块不存在时返回空集合。"""
+    aw = root.get('AppWorkshop') or {}
+    blk = aw.get(section)
+    if not isinstance(blk, dict):
+        return set()
+    return set(str(k) for k in blk if str(k).isdigit())
+
+
+def dir_size(path):
+    """递归统计目录大小。跳过符号链接，权限不足的条目直接略过。"""
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for e in it:
+                try:
+                    if e.is_symlink():
+                        continue
+                    if e.is_dir(follow_symlinks=False):
+                        total += dir_size(e.path)
+                    elif e.is_file(follow_symlinks=False):
+                        total += e.stat(follow_symlinks=False).st_size
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    return total
+
+
+def find_orphans(acf_path):
+    """找出"磁盘上有目录、acf 里完全没有记录"的工坊内容（孤儿）。
+
+    判据（约定文档第四节 L2）：
+        content\\431960\\<id> 存在，且 id 既不在 WorkshopItemsInstalled
+        也不在 WorkshopItemDetails 里 → Steam 不认识它，删了不会重下。
+
+    2026-11-07 实验 001 已实证：这类目录 Steam 不碰、不重下、不留状态。
+
+    两条硬约束：
+      1. 只读。本函数绝不删除任何东西——删由用户在资源管理器里自己按 Delete
+         （360 反勒索按"哪个进程在删图片"判定，程序删必被拦）
+      2. acf 读不出/解析失败/条目为空 → 一律返回空列表。
+         「读不懂」绝不能变成「全都是垃圾」（约定 3.5）
+    """
+    if not acf_path or not os.path.isfile(acf_path):
+        return []
+    try:
+        text, _, _ = read_text(acf_path)
+        root = parse_acf(text)
+    except (ValueError, OSError):
+        return []
+
+    known = acf_item_ids(root)
+    if not known:
+        return []
+
+    try:
+        steamapps = os.path.dirname(os.path.dirname(os.path.abspath(acf_path)))
+        cdir = os.path.join(steamapps, 'workshop', 'content', '431960')
+        names = os.listdir(cdir)
+    except OSError:
+        return []
+
+    out = []
+    for name in names:
+        if not name.isdigit():          # 跳过 _temp 之类的临时目录
+            continue
+        full = os.path.join(cdir, name)
+        if not os.path.isdir(full) or name in known:
+            continue
+        out.append({'id': name, 'path': full, 'size': dir_size(full)})
+    out.sort(key=lambda x: -x['size'])
+    return out
+
+
 def apply_changes(path, text, newline, bom, mine, to_delete, ask):
     if steam_running():
-        print('\n  [拒绝写入] 无法确认 Steam 已完全退出（检测到进程，或进程查询失败）。')
-        print('  请完全退出 Steam（任务管理器确认后台也没有），再重试。')
-        return False
+        raise WriteRefused(
+            'steam_running',
+            'Steam 还在运行，工具不能改这个文件。\n\n'
+            '没有任何文件被改动。请先在 Steam 托盘图标上右键 →「退出」，'
+            '然后再点一次清理。')
+
+    # 写之前先确认原文件本身是完好的。坏文件不写、不乱猜。
+    try:
+        root_before = parse_acf(text)
+    except ValueError as e:
+        raise WriteRefused(
+            'corrupt',
+            '这个订阅记录文件本身结构已损坏（%s）。\n\n'
+            '工具不敢在这种文件上做修改，因为无法确认改完是对的。\n'
+            '请先点「还原备份acf文件」，或把它发给开发者排查。\n\n'
+            '没有任何文件被改动。' % e)
+
     if ask:
         ans = input('\n  确认写入？输入 yes 继续: ').strip().lower()
         if ans != 'yes':
             print('  已取消，文件未改动。')
             return False
 
-    removed = []
+    removed = []        # 账号 ID，用来数条数
+    removed_ids = []    # 壁纸 ID，用来核对区块是否真的少了对的条目
 
     def repl(m):
         if m.group(1) == mine:
             return m.group(0)
         removed.append(m.group(1))
+        mm = re.match(r'\s*"(\d+)"', m.group(0))
+        if mm:
+            removed_ids.append(mm.group(1))
         return ''
 
     new = BLOCK.sub(repl, text)
-    # Steam 生成的 acf 顶层常多一个 '}'，只要求删除前后差值守恒
+
     if len(removed) != to_delete:
-        print('  删除数不符（预期 %d / 实际 %d），已中止，文件未改动。' % (to_delete, len(removed)))
-        return False
-    if (new.count('{') - new.count('}')) != (text.count('{') - text.count('}')):
-        print('  花括号结构变化，已中止，文件未改动。')
-        return False
+        raise WriteRefused(
+            'count_mismatch',
+            '算出来要删 %d 条，实际只匹配到 %d 条，数目对不上，已中止。\n\n'
+            '没有任何文件被改动。' % (to_delete, len(removed)))
+    if len(removed_ids) != len(removed):
+        raise WriteRefused(
+            'cannot_read_id',
+            '读不出要删除的壁纸编号，已中止。\n\n没有任何文件被改动。')
+
+    # 改完必须还能被完整解析
+    try:
+        root_after = parse_acf(new)
+    except ValueError as e:
+        raise WriteRefused(
+            'parse_after',
+            '改动后的内容结构不合法（%s），已中止。\n\n'
+            '没有任何文件被改动。' % e)
+
+    # 逐区块核对：明细里正好少了这几条，已装清单一条都不许变
+    det_after = section_ids(root_after, 'WorkshopItemDetails')
+    det_before = section_ids(root_before, 'WorkshopItemDetails')
+    ins_after = section_ids(root_after, 'WorkshopItemsInstalled')
+    ins_before = section_ids(root_before, 'WorkshopItemsInstalled')
+
+    if det_after != det_before - set(removed_ids):
+        raise WriteRefused(
+            'details_changed',
+            '订阅明细的条目变化和预期不符（预期少 %d 条，实际少了 %d 条），已中止。\n\n'
+            '没有任何文件被改动。'
+            % (len(removed_ids), len(det_before - det_after)))
+    if ins_after != ins_before:
+        raise WriteRefused(
+            'installed_changed',
+            '已安装清单被意外改动（少了 %d 条），已中止。\n\n'
+            '没有任何文件被改动。' % len(ins_before - ins_after))
+
     left = SUBSCRIBEDBY.findall(new)
     if any(x != mine for x in left):
-        print('  仍残留非主账号条目，已中止，文件未改动。')
-        return False
+        raise WriteRefused(
+            'residue',
+            '改完之后仍然残留别的账号的条目，已中止。\n\n'
+            '没有任何文件被改动。')
 
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     backup = path + '.bak-' + stamp
     shutil.copy2(path, backup)
-    with open(path, 'w', encoding='utf-8-sig' if bom else 'utf-8', newline='') as f:
-        f.write(new.replace('\r\n', '\n').replace('\n', newline) if newline == '\r\n' else new)
+
+    # 原子写入（约定 3.4）：中途断电/被杀也不会留下半个文件
+    body = (new.replace('\r\n', '\n').replace('\n', newline)
+            if newline == '\r\n' else new)
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8-sig' if bom else 'utf-8', newline='') as f:
+        f.write(body)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
     print('\n  已备份: %s' % backup)
     print('  已写入: %s' % path)
     print('  结果: 删除 %d 条，保留 %d 条；剩余 subscribedby 全部为 %s；结构校验通过。' %
@@ -423,11 +788,17 @@ def main():
 
     to_delete = preview(groups, order, mine)
     if args.apply:
-        apply_changes(path, text, newline, bom, mine, to_delete, ask=not args.yes)
+        try:
+            apply_changes(path, text, newline, bom, mine, to_delete, ask=not args.yes)
+        except WriteRefused as e:
+            print('\n  [未写入] %s' % e.msg)
     elif sys.stdin.isatty():
         ans = input('\n现在应用？（输入 yes 写入并自动备份，其它键仅结束）: ').strip().lower()
         if ans == 'yes':
-            apply_changes(path, text, newline, bom, mine, to_delete, ask=False)
+            try:
+                apply_changes(path, text, newline, bom, mine, to_delete, ask=False)
+            except WriteRefused as e:
+                print('\n  [未写入] %s' % e.msg)
         else:
             print('[预览模式] 未改动任何文件。')
     else:

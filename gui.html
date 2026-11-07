@@ -43,9 +43,14 @@ body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;c
 .subrow{display:flex;gap:9px;margin-top:9px}
 .subrow .btn{background:#fff;border:1px solid #d9e1eb;color:#42526a;font-size:13px;padding:11px 4px}
 .subrow .btn:hover{border-color:#2f7de1;color:#2f7de1}
+.orphbtn{width:auto;padding:5px 12px;font-size:13px;background:#fff;border:1px solid #d9e1eb;
+         color:#42526a;border-radius:7px;margin:0;flex:none}
+.orphbtn:hover{border-color:#2f7de1;color:#2f7de1}
+.orphbtn:disabled{opacity:.45;cursor:default;border-color:#e3e9f1;color:#9aa7b5}
 .logbox{background:#0f141a;border-radius:8px;padding:12px 14px;height:132px;overflow:auto;
         font:12px/1.75 Consolas,"Cascadia Mono",monospace;color:#c8d3de}
 .logbox .ok{color:#7ee787}.logbox .tip{color:#ffd166}.logbox .dim{color:#7f8c9b}
+.logbox .warn{color:#ff7b72}
 .foot{text-align:center;font-size:11px;color:#9aa7b5;margin-top:12px}
 .mask{position:fixed;inset:0;background:rgba(15,25,40,.45);display:none;
       align-items:center;justify-content:center;z-index:9}
@@ -58,6 +63,17 @@ body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;c
 .mrow .yes{background:#2f7de1;color:#fff;border-color:#2f7de1;font-weight:700}
 .mrow .no{background:#f3f6fa;color:#42526a}
 .mrow .no:hover{background:#e6ecf4}
+.modal.wide{width:540px;padding:24px 26px}
+.rulesBody{max-height:62vh;overflow:auto;margin-top:6px}
+.rulesLead{font-size:13px;line-height:1.9;color:#4a586b;margin-bottom:12px}
+.rule{display:block;padding:10px 12px;border-radius:8px;margin-bottom:9px;border:1px solid}
+.rule b{display:block;font-size:13.5px;margin-bottom:3px}
+.rule span{display:block;font-size:12.5px;line-height:1.7;color:#5a6a7d}
+.rule.bad{background:#fff6f5;border-color:#f6d5d1}
+.rule.bad b{color:#c0392b}
+.rule.good{background:#f3faf4;border-color:#d6ecd9}
+.rule.good b{color:#2e7d43}
+.rulesFoot{font-size:12.5px;line-height:1.8;color:#7f8c9b;margin-top:12px}
 </style>
 </head>
 <body>
@@ -73,6 +89,20 @@ body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;c
       <div class="stat"><span class="dot" id="acfDot"></span><span id="acfText">正在检测…</span></div>
       <div class="stat"><span class="dot" id="steamDot"></span><span id="steamText">Steam 已退出，可以安全操作</span></div>
       <div class="stat"><span class="dot warn" id="cacheDot"></span><span>创意工坊下载缓存（<b>仅 431960</b>，不含其他游戏）　<b id="cacheSize">检测中…</b></span></div>
+    </div>
+
+    <div class="card" id="ovCard" style="display:none">
+      <h2>这台电脑登过几个号</h2>
+      <div id="ovSum" style="font-size:13px;line-height:1.9;color:#4a586b"></div>
+      <div id="ovList"></div>
+      <div class="hint">只从本机 Steam 的账号目录里读，不联网、不上传、不改任何文件。</div>
+    </div>
+
+    <div class="card" id="orphCard" style="display:none">
+      <h2>硬盘上的无主残留</h2>
+      <div id="orphSum" style="font-size:13px;line-height:1.9;color:#4a586b"></div>
+      <div id="orphList"></div>
+      <div class="hint">这些目录 Steam 已经不记录了，也不会再下载。工具不代删：点「前往删除」后，在弹出的窗口里按 Delete 即可。</div>
     </div>
 
     <div class="card">
@@ -98,7 +128,27 @@ body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;c
       <div class="logbox" id="log"><span class="dim">等待操作…</span></div>
     </div>
     <div class="foot">每次修改自动备份，随时可还原 · 不删壁纸文件 · 不联网 · 不动云端订阅<br>
-      <span style="cursor:pointer;text-decoration:underline" onclick="showNotice()">查看注意事项</span></div>
+      <span style="cursor:pointer;text-decoration:underline" onclick="showRules()">清理后要注意什么</span>
+      　·　
+      <span style="cursor:pointer;text-decoration:underline" onclick="showNotice()">使用前注意事项</span></div>
+  </div>
+</div>
+
+<div class="mask" id="rulesMask" style="display:none">
+  <div class="modal wide">
+    <h3>清理完成 · 接下来注意什么</h3>
+    <div class="rulesBody">
+      <p class="rulesLead">清掉的记录，Steam 不会再自己加回来。<br>但有几种操作会让它整批复活：</p>
+      <div class="rule bad"><b>✗ 不要再登那个号</b><span>包括在 Steam 里切换账号。一登，他的壁纸订阅就会被重新拉下来，这次就白清了。</span></div>
+      <div class="rule bad"><b>✗ 别手动删 content 里还有订阅记录的文件夹</b><span>Steam 发现文件缺失，会自动重新下载补回来。</span></div>
+      <div class="rule bad"><b>✗ Steam 开着的时候改配置</b><span>写不进去，会被 Steam 覆盖。</span></div>
+      <div class="rule good"><b>✓ 订阅或取消订阅你自己的壁纸</b><span>安全。实测只会重写你自己的条目，不碰别人的。</span></div>
+      <div class="rule good"><b>✓ 本工具列出的「无主残留」可以放心删</b><span>Steam 完全不认识它们，删了不会重新下载。</span></div>
+      <p class="rulesFoot">不小心又登了别人的号？<br>打开这个工具再清一次就行，备份和还原都在。</p>
+    </div>
+    <div class="mrow">
+      <button class="yes" onclick="hideRules()">我知道了</button>
+    </div>
   </div>
 </div>
 
@@ -139,6 +189,8 @@ function closeModal(ok){
 }
 function ask(title,text,yesText){return new Promise(function(res){_resolve=res;modal(title,text,null,yesText,true);});}
 function info(title,text,yesText){modal(title,text,null,yesText||'知道了',false);}
+function showRules(){document.getElementById('rulesMask').style.display='flex';}
+function hideRules(){document.getElementById('rulesMask').style.display='none';}
 var _tick=null,_t0=0;
 function setBusy(b){
   busy=b;
@@ -159,6 +211,104 @@ function setBusy(b){
     m.textContent='一 键 清 理（推荐）';
   }
   syncButtons();
+}
+function renderOverview(ov){
+  var card=document.getElementById('ovCard');
+  // 读不到就整块隐藏，宁可少说，也不许瞎判断谁是"你自己"
+  if(!ov||!ov.ok||!ov.accounts||!ov.accounts.length){card.style.display='none';return;}
+  card.style.display='';
+  var s='';
+  if(!ov.known){
+    s='这台电脑登过 <b>'+ov.logged+'</b> 个 Steam 账号。'+
+      '认不出你现在登录的是哪一个，所以下面只列事实，不做判断。';
+  }else if(ov.others>0){
+    s='这台电脑登过 <b>'+ov.logged+'</b> 个 Steam 账号，其中 <b>'+ov.others+
+      '</b> 个不是你的号，累计订过 <b>'+ov.other_sum+'</b> 张壁纸。';
+    if(ov.other_in_acf>0){
+      s+='<br>其中 <b style="color:#c0392b">'+ov.other_in_acf+
+         ' 条记录还留在配置里</b>。如果配置被还原成旧版本，或那个账号再登录一次，'+
+         '这些壁纸会被整批下载回来。';
+    }
+    if(ov.other_on_disk>0){
+      s+='<br>硬盘上现在还剩 <b>'+ov.other_on_disk+'</b> 张不属于你的壁纸。';
+    }
+  }else{
+    s='这台电脑登过 <b>'+ov.logged+'</b> 个 Steam 账号，除了你自己以外没有别的号订过壁纸。';
+  }
+  document.getElementById('ovSum').innerHTML=s;
+  var html='';
+  ov.accounts.forEach(function(a){
+    if(!a.mine&&!a.subs)return;
+    html+='<div class="stat" style="margin-top:7px"><span class="dot'+(a.mine?'':' warn')+
+      '"></span><span>'+esc(a.name)+(a.mine?'（你自己）':'')+'　订阅过 '+a.subs+' 张'+
+      (a.on_disk>0?'，硬盘上还有 '+a.on_disk+' 张':'')+
+      (a.in_acf>0?'，Steam 里还有 '+a.in_acf+' 条':'')+
+      (a.last?'　最近 '+esc(a.last):'')+
+      '</span></div>';
+  });
+  document.getElementById('ovList').innerHTML=html;
+}
+function renderOrphans(o){
+  var card=document.getElementById('orphCard');
+  if(!o||!o.count||!o.items||!o.items.length){card.style.display='none';return;}
+  card.style.display='';
+  document.getElementById('orphSum').innerHTML=
+    '共 <b>'+o.count+'</b> 个目录，合计 <b>'+esc(o.size)+'</b>。'+
+    '删掉能释放这么多空间，<b>而且不会被重新下载</b>。';
+  var box=document.getElementById('orphList');
+  box.innerHTML='';
+  o.items.forEach(function(it,i){
+    var row=document.createElement('div');
+    row.className='stat';
+    row.style.cssText='display:flex;align-items:center;gap:10px;margin-top:8px';
+    var sp=document.createElement('span');
+    sp.style.flex='1';
+    sp.innerHTML=esc(it.id)+'　<span style="color:#8a97a8">'+esc(it.size)+'</span>';
+    var b=document.createElement('button');
+    b.className='btn orphbtn';
+    b.textContent='前往删除';
+    b.disabled=!apiReady||busy;
+    b.onclick=function(){askOrphan(i+1);};
+    row.appendChild(sp);row.appendChild(b);
+    box.appendChild(row);
+  });
+}
+function askOrphan(idx){
+  var o=(st0&&st0.orphans&&st0.orphans.items)?st0.orphans.items[idx-1]:null;
+  if(!o)return;
+  ask('删除这个无主目录？',
+    '要删的是：\n'+o.id+'（'+o.size+'）\n\n'+
+    '点「打开文件夹」后，窗口里会选中这个目录，按 Delete 键就能删掉。\n\n'+
+    '它已经不被 Steam 记录，删了不会重新下载，也不影响你自己的壁纸。',
+    '打开文件夹').then(function(ok){
+      if(ok)goOrphan(idx);
+    });
+}
+async function goOrphan(idx){
+  if(busy)return;
+  busy=true;syncButtons();
+  try{await callApi('open_orphan',idx);}finally{busy=false;syncButtons();}
+  watchOrphans();
+}
+var orphWatch=null,orphWatchN=0,orphBase=0;
+function watchOrphans(){
+  if(orphWatch){clearInterval(orphWatch);orphWatch=null;}
+  orphWatchN=0;
+  var api=pyapi();
+  orphBase=(st0&&st0.orphans)?st0.orphans.count:0;
+  if(!api||typeof api.orphans_status!=='function')return;
+  orphWatch=setInterval(async function(){
+    orphWatchN++;
+    try{
+      var r=await api.orphans_status();
+      if(r){
+        var st=st0||{};st.orphans=r;st0=st;
+        renderOrphans(r);
+        if(!r.count||r.count<orphBase){clearInterval(orphWatch);orphWatch=null;return;}
+      }
+    }catch(e){}
+    if(orphWatchN>=90&&orphWatch){clearInterval(orphWatch);orphWatch=null;}
+  },2000);
 }
 function render(st){
   st0=st;
@@ -182,6 +332,8 @@ function render(st){
     box.appendChild(el);
   });
   if(!accList.length){box.innerHTML='<div style="font-size:13px;color:#8a97a8">没有检测到订阅记录</div>';}
+  renderOverview(st.overview);
+  renderOrphans(st.orphans);
   syncButtons();
 }
 function pick(el,i){document.querySelectorAll('.pick').forEach(function(x){x.classList.remove('on')});el.classList.add('on');chosen=i;syncButtons();}
@@ -206,6 +358,7 @@ async function callApi(name,arg){
     pushLines(r.lines);
     if(r.state)render(r.state);
     if(r.error)info('提示',r.error);
+    else if(r.rules)showRules();
     else if(r.done)info('完成',r.done);
     return r;
   }catch(e){log('出错了：'+e,'tip');info('出错',String(e));return {ok:false};}
@@ -281,11 +434,13 @@ function bootOnce(){
   pushLines(b.lines);
   if(b.state)render(b.state);
   if(b.error)info('提示',b.error);
+  else if(b.rules)showRules();
   else if(b.done)info('完成',b.done);
 }
 function syncButtons(){
   // 通道没连上之前，任何按钮都不许点；连上后主按钮还要等选账号
   document.querySelectorAll('.subrow .btn').forEach(function(x){x.disabled=!apiReady||busy;});
+  document.querySelectorAll('.orphbtn').forEach(function(x){x.disabled=!apiReady||busy;});
   document.getElementById('mainBtn').disabled=(!apiReady||!chosen||busy);
   var tip=document.getElementById('bootTip');
   if(tip)tip.style.display=apiReady?'none':'';
