@@ -165,7 +165,7 @@ def read_user_subscriptions(acf_path, groups=None):
     数据源：<Steam>/userdata/<accountid>/ugc/431960_subscriptions.vdf
     为什么需要它：acf 会被 Steam 重写，历史账号的条目会被清掉；
     这份文件是按账号分目录存的，能看出"这台电脑到底有几个号订过壁纸"。
-    详见 docs/约定与实现规则.md 2.6。
+    详见 _notes/约定与实现规则.md 2.6。
 
     全程只读。任何一步失败都只是让结果变少，绝不抛异常、绝不写文件。
     """

@@ -26,8 +26,6 @@ push-force.bat
 stack_*.txt
 _verify/
 
-# 内部技术文档：docs/ 是 GitHub Pages 目录，这几份是自用笔记，绝不能跟着发布
-docs/约定与实现规则.md
-docs/AI-交接手册.md
-docs/借鉴清单.md
-docs/acf-repair.md
+# 自用技术文档（约定规则 / 交接手册 / 借鉴清单 / acf-repair）
+# 整个目录独立出来，和公开的 docs/（GitHub Pages）分开，git add -A 也不会误传
+_notes/
