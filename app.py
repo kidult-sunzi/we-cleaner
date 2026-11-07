@@ -119,12 +119,6 @@ def resource_path(name):
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
 
 
-def app_dir():
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
-
 def human(n):
     return '%.2f GB' % (n / 1024 ** 3) if n >= 1024 ** 3 else '%.1f MB' % (n / 1024 ** 2)
 
@@ -186,7 +180,7 @@ def fit_window(want_w=800, want_h=740):
     """按屏幕工作区收缩窗口。
 
     固定 740 高在 1366×768 笔记本、或 150% 缩放的 1080p 上会超出屏幕，
-    底部那排按钮（还原/卸载）点不到。
+    底部那排按钮（清缓存/还原）点不到。
     """
     try:
         class RECT(ctypes.Structure):
@@ -682,50 +676,6 @@ class Api:
             diag('notice flag failed: %r' % e)
         return {'ok': True}
 
-    # ---------- 卸载 ----------
-    @safe
-    def uninstall(self):
-        here = app_dir()
-        # 只删工具本体与配套说明；.bak 备份、视频素材（acf-demo*/script.md）一律保留
-        names = ['app.py', 'gui.html', 'gui-preview.html', 'clean_acf.py', 'build.py',
-                 'run.bat', 'README.md', 'RELEASE.md', 'LICENSE', 'we_cleaner.py',
-                 'we-cleaner.exe', 'we-cleaner.exe.sha256', 'app.ico', 'version.txt',
-                 'we-cleaner.spec']
-        exe_name = (os.path.basename(sys.executable)
-                    if getattr(sys, 'frozen', False) else 'we-cleaner.exe')
-        present = [n for n in names if os.path.isfile(os.path.join(here, n))]
-        # 批处理写在工具目录、用 %~dp0 相对定位：内容全 ASCII，
-        # 避免把中文路径写进 ascii 编码的 bat 导致 UnicodeEncodeError。
-        bat = os.path.join(here, '_we_uninstall.bat')
-        script = ['@echo off', 'cd /d "%~dp0"', 'set /a n=0', ':wait',
-                  'set /a n+=1',
-                  'del /f /q "%s" >nul 2>&1' % exe_name,
-                  'if not exist "%s" goto removed' % exe_name,
-                  'if %n% LSS 20 timeout /t 1 >nul',
-                  'if %n% LSS 20 goto wait', ':removed']
-        for n in present:
-            if n != exe_name:
-                script.append('del /f /q "%s" >nul 2>&1' % n)
-        script.append('del /f /q "_we_uninstall.bat" >nul 2>&1')
-        try:
-            with open(bat, 'w', encoding='ascii', newline='\r\n') as f:
-                f.write('\n'.join(script) + '\n')
-            subprocess.Popen(['cmd', '/c', bat], creationflags=0x08000000)
-            if self._window:
-                def _close():
-                    try:
-                        self._window.destroy()
-                    except Exception:
-                        pass
-                threading.Timer(1.5, _close).start()
-            return {'ok': True,
-                    'lines': [['正在卸载，窗口即将关闭。备份文件会保留。', 'tip']],
-                    'state': self._state()}
-        except Exception as e:
-            return self._result(False, [['卸载失败：%s' % e, 'tip']], self._state(),
-                                error='卸载失败：%s' % e)
-
-
 def selftest():
     api = Api()
     st = api.refresh()['state']
@@ -745,7 +695,7 @@ def selftest():
                [i['id'] for i in (orp.get('items') or [])]))
     methods = ['refresh', 'exit_steam', 'start_steam', 'clean', 'open_cache_folder',
                'cache_status', 'open_orphan', 'orphans_status',
-               'restore', 'uninstall', 'notice_seen', 'ready']
+               'restore', 'notice_seen', 'ready']
     for m in methods:
         assert callable(getattr(api, m)), m
     out.write('selftest: api 方法齐全（%d 个）\n' % len(methods))

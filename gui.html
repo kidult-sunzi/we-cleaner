@@ -122,7 +122,6 @@ body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;c
     <div class="subrow">
       <button class="btn" disabled onclick="clearCache()">只清下载缓存</button>
       <button class="btn" disabled onclick="restore()">还原备份acf文件</button>
-      <button class="btn" disabled onclick="uninstall()">卸载本工具</button>
     </div>
     <div id="bootTip" style="font-size:13px;color:#8a97a8;text-align:center;margin-top:8px">正在启动，按钮马上就能用…</div>
 
@@ -448,12 +447,6 @@ async function restore(){
   var ok=await ask('还原备份acf文件','确定吗？','还原');
   if(!ok)return;
   setBusy(true);try{await callApi('restore');}finally{setBusy(false);}
-}
-async function uninstall(){
-  if(busy)return;
-  var ok=await ask('卸载工具','会删掉工具自己的文件。\n\n你之前生成的备份文件会保留，不会被删。','卸载');
-  if(!ok)return;
-  await callApi('uninstall');
 }
 var booted=false, apiReady=false;
 function bootOnce(){
