@@ -108,6 +108,15 @@ body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;c
       <div class="hint">这些目录 Steam 已经不记录了，也不会再下载。工具不代删：点「前往删除」后，在弹出的窗口里按 Delete 即可。</div>
     </div>
 
+    <div class="card" id="bakCard" style="display:none">
+      <h2>以前留下的旧备份</h2>
+      <div id="bakSum" style="font-size:13px;line-height:1.9;color:#4a586b"></div>
+      <div class="subrow" style="margin-top:10px">
+        <button class="btn" disabled onclick="askBackups()">前往删除旧备份</button>
+      </div>
+      <div class="hint">这些备份里记着这台电脑登过哪些账号。工具不替你删：点按钮后，在打开的窗口里把它们选中按 Delete，会进回收站，随时能找回。</div>
+    </div>
+
     <div class="card">
       <h2>第 1 步　选出要保留的账号</h2>
       <div class="choices" id="choices"></div>
@@ -313,6 +322,48 @@ function watchOrphans(){
     if(orphWatchN>=90&&orphWatch){clearInterval(orphWatch);orphWatch=null;}
   },2000);
 }
+function renderBackups(b){
+  var card=document.getElementById('bakCard');
+  if(!b||!b.count||!b.items||!b.items.length){card.style.display='none';return;}
+  card.style.display='';
+  document.getElementById('bakSum').innerHTML=
+    '共有 <b>'+b.count+'</b> 个旧备份，合计 <b>'+esc(b.size)+'</b>。<br>'+
+    '都是清理或还原前留下的副本，<b>删掉不影响工具和壁纸</b>，但里面记着登过哪些账号。';
+}
+function askBackups(){
+  ask('删除旧备份？',
+    '要删的是工具以前留下的备份文件（文件名里有 .bak- 或 .before-restore-）。\n\n'+
+    '点「打开文件夹」后，在打开的窗口里把这些备份选中按 Delete 就行，会进回收站，随时能找回。\n\n'+
+    '只删这些备份，别删没有后缀的那个配置文件本体。\n'+
+    '工具不会替你删文件。',
+    '打开文件夹').then(function(ok){if(ok)goBackups();});
+}
+async function goBackups(){
+  if(busy)return;
+  busy=true;syncButtons();
+  try{await callApi('open_backups');}finally{busy=false;syncButtons();}
+  watchBackups();
+}
+var bakWatch=null,bakWatchN=0,bakBase=0;
+function watchBackups(){
+  if(bakWatch){clearInterval(bakWatch);bakWatch=null;}
+  bakWatchN=0;
+  var api=pyapi();
+  bakBase=(st0&&st0.backups)?st0.backups.count:0;
+  if(!api||typeof api.backups_status!=='function')return;
+  bakWatch=setInterval(async function(){
+    bakWatchN++;
+    try{
+      var r=await api.backups_status();
+      if(r){
+        var s=st0||{};s.backups=r;st0=s;
+        renderBackups(r);
+        if(!r.count||r.count<bakBase){clearInterval(bakWatch);bakWatch=null;return;}
+      }
+    }catch(e){}
+    if(bakWatchN>=90&&bakWatch){clearInterval(bakWatch);bakWatch=null;}
+  },2000);
+}
 function render(st){
   st0=st;
   var d=document.getElementById('acfDot'),t=document.getElementById('acfText');
@@ -351,6 +402,7 @@ function render(st){
   }
   renderOverview(st.overview);
   renderOrphans(st.orphans);
+  renderBackups(st.backups);
   syncButtons();
 }
 function pick(el,i){document.querySelectorAll('.pick').forEach(function(x){x.classList.remove('on')});el.classList.add('on');chosen=i;syncButtons();}

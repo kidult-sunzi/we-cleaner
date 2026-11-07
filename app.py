@@ -262,6 +262,7 @@ class Api:
         self._libs = 0
         self.overview = {'ok': False}
         self.orphans = []
+        self.backups = []
 
     # ---------- 扫描 ----------
     def _scan(self):
@@ -304,6 +305,12 @@ class Api:
             self.orphans = core.find_orphans(self.acf)
         except Exception:
             self.orphans = []
+
+        # 旧备份（含账号痕迹）：只读统计，供界面提示与手动清理
+        try:
+            self.backups = core.find_backups(self.acf)
+        except Exception:
+            self.backups = []
         return self
 
     @staticmethod
@@ -357,6 +364,12 @@ class Api:
                 'count': len(self.orphans),
                 'size': human(sum(o['size'] for o in self.orphans)) if self.orphans else '',
                 'items': [{'id': o['id'], 'size': human(o['size'])} for o in self.orphans],
+            },
+            'backups': {
+                'count': len(self.backups),
+                'size': human(sum(b['size'] for b in self.backups)) if self.backups else '',
+                'items': [{'name': b['name'], 'size': human(b['size'])}
+                          for b in self.backups[:8]],
             },
         }
 
@@ -638,6 +651,47 @@ class Api:
                 'size': human(total) if total else '',
                 'items': [{'id': o['id'], 'size': human(o['size'])} for o in self.orphans]}
 
+    # ---------- 旧备份（只打开文件夹，绝不代删，约定 3.9） ----------
+    @safe
+    def open_backups(self):
+        """打开备份所在文件夹并选中其中一个，删除完全交给用户。"""
+        LOG.clear()
+        lines = []
+        if not self.backups:
+            return self._result(False, [['没有旧备份', 'ok']], self._state(),
+                                error='现在没有旧备份，不用清理。')
+        target = self.backups[0]['path']
+        opened = False
+        try:
+            subprocess.Popen(['explorer.exe', '/select,' + os.path.normpath(target)])
+            opened = True
+        except Exception:
+            try:
+                os.startfile(os.path.dirname(target))
+                opened = True
+            except Exception as e:
+                diag('OPEN_BACKUPS failed: %r' % e)
+        if not opened:
+            return self._result(
+                False, [['打开文件夹失败', 'tip']], self._state(),
+                error='没能打开文件夹。请自己到配置文件所在目录，删掉文件名里有 .bak- 的文件。')
+        lines.append(['已打开备份所在文件夹，并选中了一个备份', 'ok'])
+        lines.append(['只删这些备份，别动没有后缀的那个配置文件本体', 'tip'])
+        lines += LOG.drain()
+        return self._result(True, lines, self._state())
+
+    def backups_status(self):
+        """前端轮询用：只重算备份列表，不写日志、不弹窗。"""
+        try:
+            self.backups = core.find_backups(self.acf)
+        except Exception:
+            pass
+        total = sum(b['size'] for b in self.backups)
+        return {'count': len(self.backups),
+                'size': human(total) if total else '',
+                'items': [{'name': b['name'], 'size': human(b['size'])}
+                          for b in self.backups[:8]]}
+
     # ---------- 还原 ----------
     @safe
     def restore(self):
@@ -695,6 +749,7 @@ def selftest():
                [i['id'] for i in (orp.get('items') or [])]))
     methods = ['refresh', 'exit_steam', 'start_steam', 'clean', 'open_cache_folder',
                'cache_status', 'open_orphan', 'orphans_status',
+               'open_backups', 'backups_status',
                'restore', 'notice_seen', 'ready']
     for m in methods:
         assert callable(getattr(api, m)), m

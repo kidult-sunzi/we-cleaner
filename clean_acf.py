@@ -663,6 +663,40 @@ def find_orphans(acf_path):
     return out
 
 
+def find_backups(acf_path):
+    """只读列出 acf 同目录里工具留下的旧备份，按大小降序（约定 3.9）。
+
+    只认 `<acf名>.bak-` 与 `<acf名>.before-restore-` 两种前缀，
+    绝不碰 acf 本体、state_*.patch 或任何别的文件。
+    这些备份内容里含订阅过的账号 ID，属于隐私痕迹，用户有权看见并清掉；
+    但程序绝不代删——只把文件夹打开，由用户在资源管理器里按 Delete。
+    """
+    if not acf_path:
+        return []
+    d = os.path.dirname(os.path.abspath(acf_path))
+    base = os.path.basename(acf_path)
+    prefixes = (base + '.bak-', base + '.before-restore-')
+    out = []
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return []
+    for n in names:
+        if not n.startswith(prefixes):
+            continue
+        p = os.path.join(d, n)
+        try:
+            if not os.path.isfile(p):
+                continue
+            size = os.path.getsize(p)
+            when = datetime.datetime.fromtimestamp(os.path.getmtime(p)).strftime('%Y-%m-%d')
+        except OSError:
+            continue
+        out.append({'name': n, 'path': p, 'size': size, 'date': when})
+    out.sort(key=lambda x: -x['size'])
+    return out
+
+
 def apply_changes(path, text, newline, bom, mine, to_delete, ask):
     if steam_running():
         raise WriteRefused(
