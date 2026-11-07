@@ -654,28 +654,39 @@ class Api:
     # ---------- 旧备份（只打开文件夹，绝不代删，约定 3.9） ----------
     @safe
     def open_backups(self):
-        """打开备份所在文件夹并选中其中一个，删除完全交给用户。"""
+        """只打开备份所在文件夹，删除完全交给用户（约定 3.9）。
+
+        2026-11-08 修：原实现是 `explorer.exe /select,<某个备份文件>`，
+        360 主动防御报「可疑程序试图利用系统资源管理器入侵」。
+        「清缓存」也用 /select，但它选中**文件夹**不会被拦；这里选中
+        **具体的配置文件备份**才会触发。现在改成 os.startfile(文件夹)：
+        既不创建 explorer 子进程，也不定位到单个配置文件。
+        """
         LOG.clear()
         lines = []
         if not self.backups:
             return self._result(False, [['没有旧备份', 'ok']], self._state(),
                                 error='现在没有旧备份，不用清理。')
-        target = self.backups[0]['path']
+        folder = os.path.dirname(self.backups[0]['path'])
         opened = False
         try:
-            subprocess.Popen(['explorer.exe', '/select,' + os.path.normpath(target)])
+            os.startfile(folder)
             opened = True
-        except Exception:
+        except Exception as e:
+            diag('OPEN_BACKUPS startfile failed: %r' % e)
             try:
-                os.startfile(os.path.dirname(target))
+                subprocess.Popen(['explorer.exe', os.path.normpath(folder)])
                 opened = True
-            except Exception as e:
-                diag('OPEN_BACKUPS failed: %r' % e)
+            except Exception as e2:
+                diag('OPEN_BACKUPS explorer failed: %r' % e2)
         if not opened:
             return self._result(
                 False, [['打开文件夹失败', 'tip']], self._state(),
-                error='没能打开文件夹。请自己到配置文件所在目录，删掉文件名里有 .bak- 的文件。')
-        lines.append(['已打开备份所在文件夹，并选中了一个备份', 'ok'])
+                error=('没能打开文件夹。请自己打开这个位置：\n%s\n\n'
+                       '删掉里面文件名带 .bak- 的备份，别动没有后缀的配置文件本体。'
+                       % folder))
+        lines.append(['已打开备份所在文件夹：%s' % folder, 'ok'])
+        lines.append(['把文件名带 .bak- 或 .before-restore- 的备份选中按 Delete 即可', 'tip'])
         lines.append(['只删这些备份，别动没有后缀的那个配置文件本体', 'tip'])
         lines += LOG.drain()
         return self._result(True, lines, self._state())

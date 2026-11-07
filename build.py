@@ -5,7 +5,7 @@
     python build.py            # 打包 + 生成 SHA256
     python build.py --assets   # 只重新生成图标和版本信息
 
-产物：dist/we-cleaner.exe、dist/we-cleaner.exe.sha256
+产物：dist/we-cleaner.exe、dist/we-cleaner.exe.sha256.txt
 """
 import hashlib
 import os
@@ -153,7 +153,7 @@ def build():
         for chunk in iter(lambda: f.read(1024 * 1024), b''):
             h.update(chunk)
     digest = h.hexdigest()
-    sha = exe + '.sha256'
+    sha = exe + '.sha256.txt'
     with open(sha, 'w', encoding='ascii') as f:
         f.write('%s  we-cleaner.exe\n' % digest)
     for p in stale:

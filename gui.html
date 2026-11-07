@@ -335,7 +335,8 @@ function askBackups(){
     '要删的是工具以前留下的备份文件（文件名里有 .bak- 或 .before-restore-）。\n\n'+
     '点「打开文件夹」后，在打开的窗口里把这些备份选中按 Delete 就行，会进回收站，随时能找回。\n\n'+
     '只删这些备份，别删没有后缀的那个配置文件本体。\n'+
-    '工具不会替你删文件。',
+    '工具不会替你删文件。\n\n'+
+    '如果安全软件弹出拦截，选「允许」；或者看运行日志里的文件夹路径，自己打开。',
     '打开文件夹').then(function(ok){if(ok)goBackups();});
 }
 async function goBackups(){
