@@ -31,6 +31,9 @@ body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;c
 .pick .who{font-size:15px;font-weight:700}
 .pick .sub{font-size:12px;color:#75839a;margin-top:3px}
 .pick .right{margin-left:auto;text-align:right;font-size:12px;color:#8a97a8;line-height:1.7}
+/* 「最近登录」只是参考信息：中性灰，不用绿色，不暗示"该选这个" */
+.taginfo{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;
+  margin-left:8px;vertical-align:2px;font-weight:400;background:#eef2f7;color:#6b7a8d}
 .hint{font-size:12px;color:#8a97a8;margin-top:9px}
 .btn{width:100%;border:0;border-radius:8px;cursor:pointer;font-family:inherit;transition:.15s}
 .main{background:#2f7de1;color:#fff;font-size:16px;font-weight:700;padding:15px;letter-spacing:2px}
@@ -106,9 +109,9 @@ body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;c
     </div>
 
     <div class="card">
-      <h2>第 1 步　选出你自己的账号</h2>
+      <h2>第 1 步　选出要保留的账号</h2>
       <div class="choices" id="choices"></div>
-      <div class="hint">看昵称点一下就行，不用管那串数字。昵称来自本机 Steam 资料。</div>
+      <div class="hint" id="pickHint">看昵称点一下就行，不用管那串数字。昵称来自本机 Steam 资料。</div>
     </div>
 
     <button class="btn main" id="mainBtn" disabled onclick="clean()">一 键 清 理（推荐）</button>
@@ -143,6 +146,7 @@ body{background:#e9eef4;font-family:"Microsoft YaHei","PingFang SC",sans-serif;c
       <div class="rule bad"><b>✗ 别手动删 content 里还有订阅记录的文件夹</b><span>Steam 发现文件缺失，会自动重新下载补回来。</span></div>
       <div class="rule bad"><b>✗ Steam 开着的时候改配置</b><span>写不进去，会被 Steam 覆盖。</span></div>
       <div class="rule good"><b>✓ 订阅或取消订阅你自己的壁纸</b><span>安全。实测只会重写你自己的条目，不碰别人的。</span></div>
+      <div class="rule good"><b>✓ 取消订阅后，去 Steam 里再核对一遍</b><span>小红车里显示的订阅可能不全，云端那份没退掉，下次同步还是会把壁纸下载回来。核对位置：Steam 上方你的 ID → 内容 → 创意工坊物品 → 已订阅物品 → 选 Wallpaper Engine。工具只管本机记录，云端这份要你自己看。</span></div>
       <div class="rule good"><b>✓ 本工具列出的「无主残留」可以放心删</b><span>Steam 完全不认识它们，删了不会重新下载。</span></div>
       <p class="rulesFoot">不小心又登了别人的号？<br>打开这个工具再清一次就行，备份和还原都在。</p>
     </div>
@@ -328,10 +332,24 @@ function render(st){
   accList.forEach(function(a,i){
     var el=document.createElement('div');el.className='pick'+(i+1===chosen?' on':'');el.dataset.idx=i+1;
     el.onclick=function(){pick(el,i+1);};
-    el.innerHTML='<span class="radio"></span><div><div class="who">'+esc(a.name)+'</div><div class="sub">'+a.count+' 张壁纸 · 账号尾号 '+esc(a.tail)+'</div></div><div class="right">最近使用<br>'+esc(a.last)+'</div>';
+    // 「最近登录」只是一条参考信息：不自动选、不锁定、不用绿色，不暗示该选它（约定 3.7）
+    var tag=(st.known&&a.mine)?'<span class="taginfo">本机最近登录 · 仅供参考</span>':'';
+    el.innerHTML='<span class="radio"></span><div><div class="who">'+esc(a.name)+tag+
+      '</div><div class="sub">'+a.count+' 张壁纸 · 账号尾号 '+esc(a.tail)+
+      '</div></div><div class="right">最近使用<br>'+esc(a.last)+'</div>';
     box.appendChild(el);
   });
   if(!accList.length){box.innerHTML='<div style="font-size:13px;color:#8a97a8">没有检测到订阅记录</div>';}
+  var ph=document.getElementById('pickHint');
+  if(ph){
+    var cn=esc(st.current_name||'这个账号');
+    if(st.known&&st.current_in_list)
+      ph.innerHTML='工具看本机记录，最近登录的是「'+cn+'」，<b>仅供参考</b>。该保留哪个号由你决定，点一下选。';
+    else if(st.known)
+      ph.innerHTML='本机最近登录的「'+cn+'」在这里没有订阅记录。请自己点选要保留的账号。';
+    else
+      ph.innerHTML='认不出本机最近登录的是哪个号。请自己点选要保留的账号；<b>选错会把自己的记录删掉</b>。';
+  }
   renderOverview(st.overview);
   renderOrphans(st.orphans);
   syncButtons();
@@ -376,10 +394,21 @@ async function startSteam(){
 }
 async function clean(){
   if(busy)return;
-  if(!chosen){info('先选一下','请先在上面点选「你自己的账号」。');return;}
-  var mine=accList[chosen-1],other=0;
+  if(!chosen){info('先选一下','请先在上面点选要保留的账号。');return;}
+  var sel=accList[chosen-1],other=0;
   accList.forEach(function(a,i){if(i+1!==chosen)other+=a.count;});
-  var ok=await ask('确认清理','将删除其他账号的 '+other+' 条记录，\n保留你自己的 '+mine.count+' 条。\n\n会自动备份，随时可以还原。','开始清理');
+  // 只提醒，不替用户改、不拦截：最近登录的是谁 ≠ 该保留谁（约定 3.7）
+  var notice='';
+  if(st0&&st0.known&&st0.current_in_list&&sel&&!sel.mine){
+    notice='\n\n注意：你选的是「'+sel.name+'」，但本机最近登录的是「'+
+      (st0.current_name||'另一个账号')+'」。\n'+
+      '只有你能判断该保留哪个号，工具不会替你改。\n'+
+      '拿不准就点「取消」，先去 Steam 看一眼登录的是哪个号。';
+  }else if(st0&&!st0.known){
+    notice='\n\n⚠ 工具认不出本机最近登录的是哪个号，请核对上面的名字。选错会把自己的记录删掉。';
+  }
+  var ok=await ask('确认清理','将保留「'+sel.name+'」的 '+sel.count+' 条记录，\n删除其他账号的 '+other+' 条记录。'+
+    notice+'\n\n会自动备份，随时可以还原。','开始清理');
   if(!ok)return;
   setBusy(true);try{await callApi('clean',chosen);}finally{setBusy(false);}
 }

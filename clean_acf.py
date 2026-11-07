@@ -420,6 +420,63 @@ def analyse(text):
     return matches, all_subs, groups
 
 
+def unmatched_subscriptions(text):
+    """找出「全文里存在、但 BLOCK 正则覆盖不到」的 subscribedby 值。
+
+    背景（2026-11-07 真实用户故障）：分析和删除用的是 BLOCK，它假设条目
+      键是纯数字 / 块内无嵌套花括号 / subscribedby 值纯数字 / 块尾有换行。
+    但最后一道校验用的是 SUBSCRIBEDBY.findall(new)，全文扫、条件宽松。
+    只要文件里有一条不符合上述假设（哪怕完全合法），它就删不掉、却会被
+    校验扫到，于是抛 residue「残留别的账号的条目」——用户完全不知道为什么。
+
+    返回漏网的值列表；空列表 = 工具把文件认全了。
+    """
+    covered = [m.span() for m in BLOCK.finditer(text)]
+    return [m.group(1) for m in SUBSCRIBEDBY.finditer(text)
+            if not any(a <= m.start() < b for a, b in covered)]
+
+
+def unmatched_details(text, mine=None):
+    """给「工具读不懂的记录」生成可截图的脱敏片段，专供运行日志。
+
+    只取账号字段所在行及前一行，压成一行显示；4 位以上数字串打码，
+    但保留引号、花括号、逗号、换行等结构，开发者一眼能看出写法差在哪。
+    全程只读，绝不把原样账号 ID 输出到界面。
+    """
+    covered = [m.span() for m in BLOCK.finditer(text)]
+    out = []
+    for m in SUBSCRIBEDBY.finditer(text):
+        if any(a <= m.start() < b for a, b in covered):
+            continue
+        val = m.group(1)
+        if mine is not None and val == mine:
+            continue
+        ls = text.rfind('\n', 0, m.start()) + 1
+        nl = text.find('\n', m.end())
+        le = len(text) if nl < 0 else nl
+        prev = text.rfind('\n', 0, max(0, ls - 1))
+        frag = text[prev + 1:le] if prev >= 0 else text[ls:le]
+        frag = re.sub(r'\s+', ' ', frag).strip()
+        frag = re.sub(r'\d{4,}', lambda x: x.group(0)[:2] + '…' + x.group(0)[-2:], frag)
+        # 「文件末尾没换行」光看片段看不出来，直接标给人看
+        if nl < 0 and not text.endswith('\n'):
+            frag += '  ← 文件到这里就结束了，末尾没有换行'
+        out.append((val, frag[:200]))
+    return out
+
+
+def unknown_shape_message(n, path=''):
+    """给小白看的人话：卡在哪 → 可能原因 → 你要做什么（铁律 4）。"""
+    return ('这个文件里有 %d 条订阅记录的写法，和工具见过的都不一样。\n'
+            '工具读不懂它们，硬清理可能清不干净，所以停下来了。\n\n'
+            '这不是你操作错了，多半是 Steam 版本不同、记录格式变了。\n\n'
+            '请这样做：把主界面「运行日志」里这几行截图发给工具开发者，\n'
+            '或者直接把下面这个文件发过来，适配之后就能正常清理。\n'
+            '%s\n\n'
+            'Steam 和所有文件都没有被改动。'
+            % (n, path or '（配置文件路径见主界面）'))
+
+
 def normalise_mine(value, groups):
     """支持序号、9 位 account ID、17 位 SteamID64。"""
     v = value.strip()
@@ -625,6 +682,14 @@ def apply_changes(path, text, newline, bom, mine, to_delete, ask):
             '请先点「还原备份acf文件」，或把它发给开发者排查。\n\n'
             '没有任何文件被改动。' % e)
 
+    # 「能认全」必须和「实际删」用同一套判据（约定 3.6）。
+    # 提前拦在这里：命令行不会白问一次确认；界面层会在退出 Steam 之前就拦下。
+    unknown = [v for v in unmatched_subscriptions(text) if v != mine]
+    if unknown:
+        raise WriteRefused(
+            'unknown_shape',
+            unknown_shape_message(len(unknown), path))
+
     if ask:
         ans = input('\n  确认写入？输入 yes 继续: ').strip().lower()
         if ans != 'yes':
@@ -687,6 +752,7 @@ def apply_changes(path, text, newline, bom, mine, to_delete, ask):
         raise WriteRefused(
             'residue',
             '改完之后仍然残留别的账号的条目，已中止。\n\n'
+            '这通常说明文件里有工具没认出来的记录写法。请把配置文件发给开发者适配。\n\n'
             '没有任何文件被改动。')
 
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')

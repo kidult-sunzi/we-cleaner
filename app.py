@@ -316,8 +316,24 @@ class Api:
     def _tail(a):
         return a[-4:] if len(a) >= 4 else '****'
 
+    def _current_account_id(self):
+        """当前登录账号（accountid）。认不出返回 None，绝不猜。
+
+        只信 read_user_subscriptions() 交叉核对过的结果：它要求
+        loginusers.vdf 的 MostRecent 号确实存在于 userdata 账号目录，
+        否则 known=False。界面与后端共用这一个判断，别另起一套。
+        """
+        ov = self.overview or {}
+        if not ov.get('ok') or not ov.get('known'):
+            return None
+        for a in ov.get('accounts', []):
+            if a.get('mine'):
+                return str(a['id'])
+        return None
+
     def _state(self):
         accounts = []
+        cur = self._current_account_id()
         for a in self.order:
             name, when = self.meta.get(a, ('', ''))
             accounts.append({
@@ -325,7 +341,11 @@ class Api:
                 'count': len(self.groups[a]),
                 'last': when or '未知',
                 'tail': self._tail(a),
+                'mine': bool(cur and a == cur),
             })
+        cur_name = ''
+        if cur:
+            cur_name = self.meta.get(cur, ('', ''))[0] or ('账号尾号 ' + self._tail(cur))
         cache = self._cache_size
         return {
             'acf': self.acf or '',
@@ -333,6 +353,9 @@ class Api:
             'steam': 'running' if core.steam_running() else 'stopped',
             'cache': human(cache) if cache else '0 GB（已清理）',
             'accounts': accounts,
+            'known': bool(cur),
+            'current_in_list': bool(cur and cur in self.groups),
+            'current_name': cur_name,
             'webview2': webview2_ok(),
             'libs': self._libs,
             'overview': self.overview,
@@ -440,12 +463,37 @@ class Api:
         except (ValueError, IndexError, TypeError):
             return self._result(False, [['请先选择账号', 'tip']], self._state(),
                                 error='请先在上面点选「你自己的账号」。')
+
+        # 认得出「最近登录的账号」也绝不替用户决定保留谁（约定 3.7）。
+        # 那条信息只用于界面展示和确认框提醒，后端不拦截、不改写用户的选择。
+
+        # 先读文件确认「工具能认全」，再动 Steam。
+        # 以前这道检查在写盘前最后一步，失败时用户的 Steam 已经被关掉了，
+        # 却只收到一句看不懂的「残留别的账号的条目」。见约定文档 3.6。
+        try:
+            text, nl, bom = core.read_text(self.acf)
+        except OSError:
+            return self._result(False, [['配置文件读取失败', 'warn']], self._state(),
+                                error='配置文件读不出来，已停止。\n\n没有任何文件被改动。')
+        bad = core.unmatched_details(text, mine=mine)
+        if bad:
+            # 运行日志要能当"诊断报告"截图发人：写清楚几条、长什么样、可能是什么原因。
+            # 片段已由 core 打码，不含原样账号 ID。
+            lines.append(['配置里有 %d 条记录工具读不懂，已停止' % len(bad), 'warn'])
+            lines.append(['下面是它们的写法（数字已打码），把这一屏截图发给开发者就能定位：', 'dim'])
+            for i, (_, frag) in enumerate(bad[:6], 1):
+                lines.append(['  第 %d 条：%s' % (i, frag), 'dim'])
+            if len(bad) > 6:
+                lines.append(['  ……还有 %d 条，写法类似' % (len(bad) - 6), 'dim'])
+            lines.append(['常见原因：记录里多了一层小括号 / 文件末尾少了换行 / 一格写了多个账号。', 'dim'])
+            lines.append(['没有改动任何文件，Steam 也没有被关闭。', 'dim'])
+            return self._result(False, lines, self._state(),
+                                error=core.unknown_shape_message(len(bad), self.acf))
         if not self._exit_steam(lines):
             lines += LOG.drain()
             return self._result(False, lines, self._state(),
                                 error=('没能自动退出 Steam。\n请在 Steam 窗口右上角点 X，'
                                        '或托盘图标右键 → 退出，然后重试。\n\n没有改动任何文件。'))
-        text, nl, bom = core.read_text(self.acf)
         _, _, g = core.analyse(text)
         n = sum(len(r) for a, r in g.items() if a != mine)
         keep = len(g.get(mine, []))
@@ -456,9 +504,12 @@ class Api:
         try:
             ok = core.apply_changes(self.acf, text, nl, bom, mine, n, ask=False)
         except core.WriteRefused as e:
-            # 拒写必须原样告诉用户，不能糊成"校验没通过"，更不能当成功
+            # 拒写必须原样告诉用户，不能糊成"校验没通过"，更不能当成功。
+            # 以前日志只留第一行，用户截图帮不上忙；现在整段原因都进运行日志。
             lines += LOG.drain()
-            lines.append([e.msg.split('\n')[0], 'warn'])
+            for ln in e.msg.split('\n'):
+                if ln.strip():
+                    lines.append([ln, 'warn'])
             return self._result(False, lines, self._state(), error=e.msg)
         lines += LOG.drain()
         if ok:
