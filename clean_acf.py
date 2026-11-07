@@ -779,18 +779,60 @@ def apply_changes(path, text, newline, bom, mine, to_delete, ask):
 
 
 def do_restore(path):
+    """从「能解析的最近一次自动备份」还原（约定 3.8）。
+
+    2026-11-07 修复的真实故障：原来按文件名排序取最后一个 `.bak-*`，
+    会把手工备份 `.bak-fix-20261106-235549`（本身是坏的）选中并覆盖回去，
+    于是「还原」越还原越坏，还会把坏文件继续复制成新备份。
+
+    三条硬约束：
+      1. 只认工具自动生成的 `.bak-YYYYmmdd-HHMMSS`，手工/实验备份不参与
+      2. 从最新往回找第一个能被 parse_acf 完整解析、且条目非空的
+      3. 还原前留一份现场，写后再验一次，失败回滚
+    """
     d = os.path.dirname(path) or '.'
     base = os.path.basename(path)
-    baks = sorted(f for f in os.listdir(d) if f.startswith(base + '.bak-'))
+    pat = re.compile(r'^' + re.escape(base) + r'\.bak-\d{8}-\d{6}$')
+    baks = sorted(f for f in os.listdir(d) if pat.match(f))
     if not baks:
-        print('没有找到备份文件。')
+        print('没有找到工具自动生成的备份（.bak-年月日-时分秒）。')
         return False
     if steam_running():
         print('[拒绝还原] Steam 仍在运行，请先完全退出。')
         return False
-    src = os.path.join(d, baks[-1])
-    shutil.copy2(src, path)
-    print('已从 %s 还原到 %s' % (src, path))
+
+    good = None
+    for f in reversed(baks):
+        src = os.path.join(d, f)
+        try:
+            root = parse_acf(read_text(src)[0])
+        except (ValueError, OSError):
+            print('  跳过无法解析的备份：%s' % f)
+            continue
+        if not acf_item_ids(root):
+            print('  跳过没有订阅条目的备份：%s' % f)
+            continue
+        good = src
+        break
+    if not good:
+        print('所有自动备份都无法解析，已停止。没有改动任何文件。')
+        return False
+
+    stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    keep = os.path.join(d, base + '.before-restore-' + stamp)
+    try:
+        shutil.copy2(path, keep)          # 留现场；名字不匹配 .bak-*，不会被再选中
+        shutil.copy2(good, path)
+        parse_acf(read_text(path)[0])     # 写完再验一次
+    except (ValueError, OSError) as e:
+        try:
+            shutil.copy2(keep, path)      # 回滚
+        except OSError:
+            pass
+        print('[还原失败，已回滚] %s' % e)
+        return False
+    print('已从 %s 还原到 %s' % (os.path.basename(good), path))
+    print('还原前的文件已保留为 %s' % os.path.basename(keep))
     return True
 
 

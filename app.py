@@ -653,7 +653,7 @@ class Api:
         lines += LOG.drain()
         if not ok:
             return self._result(False, lines, self._state(),
-                                error='没有找到可用备份，或没能确认 Steam 已退出。\n\n没有改动任何文件。')
+                                error='还原没有成功，具体原因写在下面的运行日志里。\n\n没有改动任何文件。')
         self._scan()
         return self._result(True, lines, self._state(), done='已还原上一次的配置文件备份。')
 
