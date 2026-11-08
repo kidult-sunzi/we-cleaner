@@ -125,12 +125,23 @@ Steam 就不会再认它们，还会连已下载的文件一起清掉；而且�
 
 ## 关于官方那个修复工具
 
-小红车目录下有个 `bin\steamredownloadfixer32.exe`，官方帮助页还在推荐它，
-用来修「Steam 反复重新下载」的问题。
+小红车目录下有个 `bin\steamredownloadfixer32.exe`，官方帮助页推荐用它修
+「Steam 反复重新下载」的问题。
 
-但有用户反馈：它会在 `steamapps\common\workshop` 下面找记录文件，
-而现在的版本实际放在 `steamapps\workshop`，路径对不上，所以修不了。
-**想试的话先按方案二第 4 步备份**，不生效就回到方案二或方案三。
+早期版本有个路径问题：它会在 `steamapps\common\workshop` 下面找记录文件，
+而现在的版本实际放在 `steamapps\workshop`，对不上。**这个路径问题已经修复了**，
+可以正常使用。
+
+用法（官方页面步骤）：
+
+1. 完全退出 Steam。
+2. 打开小红车安装目录（默认 `C:\Program Files (x86)\Steam\steamapps\common\wallpaper_engine`）。
+3. 运行里面的 `bin\steamredownloadfixer32.exe`。
+4. 重启 Steam，然后对小红车做一次「验证文件完整性」
+   （库 → 右键 Wallpaper Engine → 属性 → 已安装文件 → 验证游戏文件完整性）。
+5. 如果还不行，再走方案二或方案三。
+
+注意：Steam 下载缓存每坏一次就得重跑一次，这是 Steam 自己的问题，小红车修不了。
 
 ---
 
