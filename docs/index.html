@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>小红车清理工具 · 下载</title>
+<meta name="description" content="清理 Wallpaper Engine 创意工坊里其他 Steam 账号留下的订阅记录，不用重下自己的壁纸。单文件 exe，不联网，改前自动备份，可随时还原。">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--blue:#2f7de1;--blue-d:#2668bd;--ink:#1f2937;--sub:#5a6a7c;--line:#e1e7ef;--bg:#eef2f7}
@@ -51,13 +52,6 @@ footer a{color:#8fa3ba}
     <div class="tag">登过别人的 Steam 号之后，硬盘少了几十 G，小红车里却看不见</div>
   </header>
 
-  <div style="background:#fff8e8;border:1px solid #f3e0b8;border-left:5px solid #e0a415;
-              border-radius:9px;padding:14px 16px;margin-bottom:16px;font-size:14px;line-height:1.8;color:#7a5a12">
-    <b>壁纸一直被自动下回来？</b>　不用装工具也能解决 ——
-    <a href="https://github.com/kidult-sunzi/we-cleaner/blob/main/docs/manual-fix.md"
-       style="color:#a86000;font-weight:700;text-decoration:underline">看手动解决教程 →</a>
-  </div>
-
   <div class="card">
     <h2>下载</h2>
     <a class="dl" href="https://github.com/kidult-sunzi/we-cleaner/releases/latest/download/we-cleaner.exe">
@@ -70,7 +64,7 @@ footer a{color:#8fa3ba}
       <a href="https://github.com/kidult-sunzi/we-cleaner">源代码</a>
     </div>
     <div class="fileinfo" style="margin-top:10px">
-      <span>GitHub 打不开时用<b>蓝奏云备用</b>：输入提取码 <b>hifz</b>，只下载那个 <b>.exe</b> 文件（文件名里带版本号）；旁边的 <b>.sha256.txt</b> 是校验文件（记事本就能打开），不用下。不用登录、不用装客户端</span>
+      <span>GitHub 打不开时用<b>蓝奏云备用</b>：输入提取码 <b>hifz</b>，只下载那个 <b>.exe</b> 文件；旁边的 <b>.sha256.txt</b> 是校验文件（记事本就能打开），不用下。不用登录、不用装客户端</span>
     </div>
     <div class="fileinfo">
       <span>版本 <b>1.2.4</b></span>
@@ -105,7 +99,7 @@ footer a{color:#8fa3ba}
     <table class="tbl">
       <tr><td>起因</td><td>这台电脑登过别人的 Steam 账号（代练、借号）。Steam 会把<b>这个账号订阅的创意工坊内容</b>也下载到本机</td></tr>
       <tr><td>为什么看不见</td><td>小红车只显示<b>你当前登录账号</b>的订阅列表，别人的那些不在里面，所以软件里一切正常</td></tr>
-      <tr><td>为什么删了还有</td><td>订阅记录还留在 <code>appworkshop_431960.acf</code> 里。你把文件夹删掉，Steam 一校验完整性就以为文件丢了，<b>又下一遍</b></td></tr>
+      <tr><td>为什么删了还有</td><td>订阅记录还留在 <code>appworkshop_431960.acf</code> 里。你把文件夹删掉，Steam 启动或校验时发现文件缺失，<b>又下一遍</b></td></tr>
       <tr><td>所以要清什么</td><td>清的是<b>那条记录</b>，不是文件。记录没了，Steam 才不会继续下</td></tr>
     </table>
     <div style="font-size:13px;color:#6b7280;margin-top:8px">
@@ -116,7 +110,7 @@ footer a{color:#8fa3ba}
   <div class="card">
     <h2>它会做什么、不会做什么</h2>
     <table class="tbl">
-      <tr><td>会做</td><td>删掉 acf 里其他账号的订阅记录；打开下载缓存文件夹，由你自己删掉 431960</td></tr>
+      <tr><td>会做</td><td>删掉 acf 里其他账号的订阅记录；列出累积的旧备份，打开文件夹由你自己删；打开下载缓存文件夹，由你自己删掉 431960</td></tr>
       <tr><td>不会做</td><td>不删壁纸文件、不改云端订阅、不改 Steam 程序、不读取账号密码</td></tr>
       <tr><td>网络</td><td><b>完全不联网</b>，没有上传，没有统计</td></tr>
       <tr><td>安全网</td><td>每次修改前自动备份，界面上有「还原备份acf文件」随时回退</td></tr>
@@ -126,7 +120,9 @@ footer a{color:#8fa3ba}
   <div class="card">
     <div class="warn">
       <b>第一次打开可能被拦。</b> exe 没有代码签名，Windows 可能弹「已保护你的电脑」，杀软也可能误报。
-      点「更多信息 → 仍要运行」即可。执行清理时 360 等会弹「是否允许删除文件」，选允许。
+      点「更多信息 → 仍要运行」即可。点「前往删除旧备份」这类按钮打开文件夹时，
+      部分安全软件可能因为「陌生程序调用资源管理器」弹一次拦截，选「允许」就行——
+      <b>工具不删任何文件</b>，删除始终是你在窗口里按 Delete 完成的。
       想核对文件是否被改动，比对上面的 SHA256。
       <div style="margin-top:8px"><a href="https://github.com/kidult-sunzi/we-cleaner/blob/main/docs/false-positive.md" style="color:#8a5b00">详细说明</a></div>
     </div>
@@ -138,9 +134,9 @@ footer a{color:#8fa3ba}
       <p style="margin-top:8px">
         只改 <code>SteamLibrary\steamapps\workshop\appworkshop_431960.acf</code> 里的
         <code>WorkshopItemDetails</code> 条目：按 <code>subscribedby</code> 字段判断归属，
-        删掉非主账号的条目，保留你自己的。Steam 生成的 acf 顶层本身多一个 <code>}</code>，
-        所以校验用的是「删除前后括号差值守恒」，不是绝对配平。写入前会检查 Steam 进程、删除条数、
-        结构是否合法，任一异常立即中止、文件不动。
+        删掉非主账号的条目，保留你自己的。删除前后都用严格解析器重新读一遍
+        （括号必须配平、不能有多余符号），再核对「明细少了该少的、已装清单一条没动」，
+        任一项不符立即中止，文件不动。
       </p>
       <p style="margin-top:8px">
         清缓存这一步工具<b>不执行删除</b>：只打开 downloads 文件夹并选中 431960，
