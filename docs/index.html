@@ -67,12 +67,12 @@ footer a{color:#8fa3ba}
       <span>GitHub 打不开时用<b>蓝奏云备用</b>：输入提取码 <b>hifz</b>，只下载那个 <b>.exe</b> 文件；旁边的 <b>.sha256.txt</b> 是校验文件（记事本就能打开），不用下。不用登录、不用装客户端</span>
     </div>
     <div class="fileinfo">
-      <span>版本 <b>1.2.4</b></span>
+      <span>版本 <b>1.2.5</b></span>
       <span>大小 <b>13.05 MB</b></span>
       <span>更新 <b>2026-11-08</b></span>
       <span>无需安装 Python</span>
     </div>
-    <div class="hash">SHA256：9823d5441556274beb0cd174d34492a40092146b4546253d8ba6be63a4b0511a</div>
+    <div class="hash">SHA256：1e3b07a040bfe7f38a66269e1f1bed82e71283f5648691621445b0287fe0b558</div>
     <div class="warn" style="margin-top:14px">
       <b>只认这两个下载地址</b>：本页上面的蓝色下载按钮，和蓝奏云那个固定文件夹（提取码 hifz）。
       别的网站、群文件、别人转存的网盘都不保证是原版——有人会把工具换个壳，里面装别的东西。<br>
@@ -133,8 +133,10 @@ footer a{color:#8fa3ba}
       <summary>它到底改了什么？（给懂的人看）</summary>
       <p style="margin-top:8px">
         只改 <code>SteamLibrary\steamapps\workshop\appworkshop_431960.acf</code> 里的
-        <code>WorkshopItemDetails</code> 条目：按 <code>subscribedby</code> 字段判断归属，
-        删掉非主账号的条目，保留你自己的。删除前后都用严格解析器重新读一遍
+        <code>WorkshopItemDetails</code> 条目：按 <code>subscribedby</code> 判断归属
+        （一个值里可能写了多个账号、用逗号分隔）。账号全是别人的整条删；
+        你和别人混在同一条里的，只把归属改成只剩你，条目不删。
+        删除前后都用严格解析器重新读一遍
         （括号必须配平、不能有多余符号），再核对「明细少了该少的、已装清单一条没动」，
         任一项不符立即中止，文件不动。
       </p>
