@@ -36,11 +36,21 @@ if hasattr(sys.stdout, 'reconfigure'):
 STEAM_ID64_BASE = 76561197960265728
 ACF_NAME = 'appworkshop_431960.acf'
 
-# 匹配一个带 subscribedby 的条目块，连同缩进和行尾换行一起删除，不留空行
+# 匹配一个带 subscribedby 的条目块，连同缩进和行尾换行一起删除，不留空行。
+# 值可能是单个账号，也可能是**多个账号用逗号分隔**：2026-11-08 真实用户截图里
+# 出现过 `"subscribedby" "97…,15…,45…,15…"`（四个账号写在一格），旧正则只认
+# 纯数字，于是 14 条全被当成「读不懂」而拒写。这里用 ACCT_LIST 兼容两种写法。
+ACCT = r'[0-9]+'
+ACCT_LIST = ACCT + r'(?:\s*,\s*' + ACCT + r')*'
 BLOCK = re.compile(
-    r'[ \t]*"[0-9]+"\s*\{[^{}]*"subscribedby"\s*"([0-9]+)"[^{}]*\}[ \t]*\r?\n'
+    r'[ \t]*"[0-9]+"\s*\{[^{}]*"subscribedby"\s*"(' + ACCT_LIST + r')"[^{}]*\}[ \t]*\r?\n'
 )
 SUBSCRIBEDBY = re.compile(r'"subscribedby"\s*"([^"]+)"')
+
+
+def split_ids(value):
+    """把 "A" 或 "A,B,C" 拆成账号列表（去空白、丢掉空项）。"""
+    return [x.strip() for x in value.split(',') if x.strip()]
 
 
 def mask(x):
@@ -416,8 +426,31 @@ def analyse(text):
     for m in matches:
         item = re.search(r'"([0-9]+)"', m.group(0)).group(1)
         touched = re.search(r'"timetouched"\s*"([0-9]+)"', m.group(0))
-        groups[m.group(1)].append((item, int(touched.group(1)) if touched else 0))
+        when = int(touched.group(1)) if touched else 0
+        # 共享记录会同时计入每个涉及的账号：界面按账号显示「订阅过几张」，
+        # 但「要处理几条」必须用 plan_ops 去重，不能把这里的长度相加。
+        for acc in split_ids(m.group(1)):
+            groups[acc].append((item, when))
     return matches, all_subs, groups
+
+
+def plan_ops(text, mine):
+    """按真实判定统计：要整条删几条、只改归属值几条。
+
+    - 记录里的账号全是别人 → 整条删
+    - 记录里含自己、但还有别人 → 不删，只把归属值改成只剩自己
+    - 记录里只有自己 → 不动
+    返回 (delete_count, rewrite_count)。
+    """
+    rm = rw = 0
+    for m in BLOCK.finditer(text):
+        ids = split_ids(m.group(1))
+        if mine in ids:
+            if len(ids) > 1:
+                rw += 1
+        else:
+            rm += 1
+    return rm, rw
 
 
 def unmatched_subscriptions(text):
@@ -449,7 +482,9 @@ def unmatched_details(text, mine=None):
         if any(a <= m.start() < b for a, b in covered):
             continue
         val = m.group(1)
-        if mine is not None and val == mine:
+        # 只有「这条记录里的账号全是自己」才不算读不懂；共享记录也要显示出来
+        ids_here = split_ids(val)
+        if mine is not None and ids_here and all(a == mine for a in ids_here):
             continue
         ls = text.rfind('\n', 0, m.start()) + 1
         nl = text.find('\n', m.end())
@@ -507,15 +542,20 @@ def print_accounts(text, meta):
     return matches, groups, order
 
 
-def preview(groups, order, mine):
-    others = {a: r for a, r in groups.items() if a != mine}
-    total = sum(len(r) for r in others.values())
-    print('\n  主账号: %s  →  保留 %d 条' % (mine, len(groups[mine])))
-    for a, r in others.items():
-        ids = ', '.join(x[0] for x in r)
-        print('  将删除 %s 的 %d 条: %s' % (a, len(r), ids[:300] + (' ...' if len(ids) > 300 else '')))
-    print('  合计删除 %d 条。' % total)
-    return total
+def preview(groups, order, mine, text):
+    """打印计划。条数用 plan_ops 去重，不能把各账号列表长度相加——
+    一条共享记录会同时出现在多个账号的列表里，相加会重复计数。"""
+    rm, rw = plan_ops(text, mine)
+    print('\n  主账号: %s  →  保留 %d 条记录' % (mine, len(groups.get(mine, []))))
+    for a, r in groups.items():
+        if a == mine:
+            continue
+        ids = [x[0] for x in r]
+        print('  涉及 %s 的 %d 条: %s' % (a, len(ids), ', '.join(ids)[:300]))
+    print('  将整条删除 %d 条（账号全是别人的）。' % rm)
+    if rw:
+        print('  另有 %d 条是共享记录（含你自己），只把归属值改成只剩你，条目保留。' % rw)
+    return rm
 
 
 class WriteRefused(Exception):
@@ -718,7 +758,13 @@ def apply_changes(path, text, newline, bom, mine, to_delete, ask):
 
     # 「能认全」必须和「实际删」用同一套判据（约定 3.6）。
     # 提前拦在这里：命令行不会白问一次确认；界面层会在退出 Steam 之前就拦下。
-    unknown = [v for v in unmatched_subscriptions(text) if v != mine]
+    # 漏网条目（BLOCK 认不出的写法）只要涉及「不是自己」的账号就必须拦；
+    # 只属于自己的畸形记录不拦，否则用户什么都干不了。
+    unknown = []
+    for v in unmatched_subscriptions(text):
+        ids = split_ids(v)
+        if not ids or any(a != mine for a in ids):
+            unknown.append(v)
     if unknown:
         raise WriteRefused(
             'unknown_shape',
@@ -733,9 +779,19 @@ def apply_changes(path, text, newline, bom, mine, to_delete, ask):
     removed = []        # 账号 ID，用来数条数
     removed_ids = []    # 壁纸 ID，用来核对区块是否真的少了对的条目
 
+    rewrites = []       # 共享记录：只改归属值，不删条目
+
     def repl(m):
-        if m.group(1) == mine:
-            return m.group(0)
+        ids = split_ids(m.group(1))
+        if mine in ids:
+            if len(ids) == 1:
+                return m.group(0)          # 只有自己，原样不动
+            # 共享记录：把归属值改成只剩自己（别人的痕迹也就没了），条目本身保留
+            blk = m.group(0)
+            s = m.start(1) - m.start(0)
+            e = m.end(1) - m.start(0)
+            rewrites.append(list(ids))
+            return blk[:s] + mine + blk[e:]
         removed.append(m.group(1))
         mm = re.match(r'\s*"(\d+)"', m.group(0))
         if mm:
@@ -781,8 +837,10 @@ def apply_changes(path, text, newline, bom, mine, to_delete, ask):
             '已安装清单被意外改动（少了 %d 条），已中止。\n\n'
             '没有任何文件被改动。' % len(ins_before - ins_after))
 
-    left = SUBSCRIBEDBY.findall(new)
-    if any(x != mine for x in left):
+    left = set()
+    for v in SUBSCRIBEDBY.findall(new):
+        left.update(split_ids(v))
+    if left - {mine}:
         raise WriteRefused(
             'residue',
             '改完之后仍然残留别的账号的条目，已中止。\n\n'
@@ -928,7 +986,7 @@ def main():
         print('可选: %s' % ', '.join(order))
         sys.exit(1)
 
-    to_delete = preview(groups, order, mine)
+    to_delete = preview(groups, order, mine, text)
     if args.apply:
         try:
             apply_changes(path, text, newline, bom, mine, to_delete, ask=not args.yes)

@@ -502,12 +502,17 @@ class Api:
                                 error=('没能自动退出 Steam。\n请在 Steam 窗口右上角点 X，'
                                        '或托盘图标右键 → 退出，然后重试。\n\n没有改动任何文件。'))
         _, _, g = core.analyse(text)
-        n = sum(len(r) for a, r in g.items() if a != mine)
+        # 条数要用 plan_ops 去重：一条共享记录会同时算进多个账号，
+        # 把各账号列表长度相加会多算、导致和实际匹配数对不上而拒写。
+        n, n_shared = core.plan_ops(text, mine)
         keep = len(g.get(mine, []))
-        if n == 0:
+        if n == 0 and n_shared == 0:
             lines.append(['没有别的账号记录，已经是干净的', 'ok'])
             return self._result(True, lines, self._state(), done='没有别的账号记录，不用清理。')
-        lines.append(['将删除其他账号 %d 条，保留你的 %d 条' % (n, keep), 'tip'])
+        msg = '将删除其他账号 %d 条' % n
+        if n_shared:
+            msg += '，另有 %d 条共享记录改成只留你' % n_shared
+        lines.append([msg + '，保留你的 %d 条' % keep, 'tip'])
         try:
             ok = core.apply_changes(self.acf, text, nl, bom, mine, n, ask=False)
         except core.WriteRefused as e:
@@ -523,7 +528,8 @@ class Api:
             self._scan()
             res = self._result(
                 True, lines, self._state(),
-                done='清理完成：删除 %d 条，保留 %d 条。\n备份已保存在配置文件旁边。' % (n, keep))
+                done='清理完成：删除 %d 条%s，保留 %d 条。\n备份已保存在配置文件旁边。'
+                     % (n, ('、共享记录改成只留你 %d 条' % n_shared) if n_shared else '', keep))
             # 前端见到 rules 就弹「清理后要注意什么」，而不是普通完成框
             res['rules'] = True
             return res
