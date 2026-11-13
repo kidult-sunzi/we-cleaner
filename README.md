@@ -89,4 +89,9 @@ python clean_acf.py --mine <9位账号ID> --apply # 跳过交互
 python clean_acf.py --restore                 # 从最近备份还原
 ```
 
-第三方非官方工具，与 Valve / Wallpaper Engine 无关。MIT。
+第三方非官方工具，与 Valve / Wallpaper Engine 无关。MIT 许可。
+
+**本工具永久免费。** 官方只有两个下载地址：本仓库的 Releases 页，和
+[下载页](https://kidult-sunzi.github.io/we-cleaner/) 上的蓝奏云固定文件夹（提取码 hifz）。
+任何收费版本、付费群、代下载、其他站点转存的网盘都不是本工具；
+下载后可用下载页贴的 SHA256 核对文件有没有被改过。
