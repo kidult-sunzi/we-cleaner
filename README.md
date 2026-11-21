@@ -54,7 +54,8 @@ exe 没有代码签名，Windows 可能弹蓝色「Windows 已保护你的电脑
 ## 前提
 
 - Windows 10 / 11（Steam 自 2024-01-01 起已停止支持 Win7 / 8 / 8.1）。
-- WebView2 Runtime：Win11 与常规 Win10 自带；万一缺了，工具会弹中文提示而不是白窗。
+- WebView2 Runtime：Win11 与常规 Win10 自带。少数电脑（精简版系统、卸载过 Edge）没有，
+  打开工具会是**白屏**：到微软官网安装 [WebView2 Runtime 常青版](https://developer.microsoft.com/microsoft-edge/webview2/)，装完重新打开即可。
 - Steam 必须完全退出才能改配置，工具会自己检查；查不到进程状态时一律拒绝写入。
 
 ## 改完之后怎么确认
