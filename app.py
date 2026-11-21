@@ -139,13 +139,48 @@ def size_of(path):
     return total
 
 
+def _webview2_exe(roots=None):
+    """只读找 WebView2 运行时的实际可执行文件，找到返回路径，否则 None。
+
+    2026-11-21 加：原来的检测只读注册表 pv，卸载 Edge / 残留注册表项时
+    会误判成「已安装」，跳过提示直接开窗口 → 白屏。这里必须看到
+    `msedgewebview2.exe` 真实存在（且不是空文件）才算可用。
+    实测 `msedgewebview2.exe --version` 在 GUI 子系统下不输出、返回 13，
+    不能当版本判据，所以只做文件级探测，不执行它。
+    """
+    if roots is None:
+        roots = [
+            r'C:\Program Files (x86)\Microsoft\EdgeWebView\Application',
+            r'C:\Program Files\Microsoft\EdgeWebView\Application',
+        ]
+        la = os.environ.get('LOCALAPPDATA')
+        if la:
+            roots.append(os.path.join(la, 'Microsoft', 'EdgeWebView', 'Application'))
+    for root in roots:
+        try:
+            if not root or not os.path.isdir(root):
+                continue
+            for name in os.listdir(root):
+                if not re.match(r'^\d+\.', name):
+                    continue
+                exe = os.path.join(root, name, 'msedgewebview2.exe')
+                if os.path.isfile(exe) and os.path.getsize(exe) > 1024:
+                    return exe
+        except OSError:
+            continue
+    return None
+
+
 def webview2_ok():
     """返回 (是否可用, 版本号)。
 
     WebView2 可能装在 Program Files、Program Files (x86) 或用户目录（按用户安装），
     只认一个固定路径会把「明明装了」误判成「没装」，工具直接不启动。
-    优先读注册表里的 pv 版本号，读不到再退回三个常见目录探测。
+    注册表只用来取版本号；**是否可用必须以 _webview2_exe() 找到真实文件为准**，
+    否则卸载 Edge 后的残留 pv 会骗过检测，跳过提示直接白屏。
     """
+    exe = _webview2_exe()
+    pv_found = ''
     try:
         import winreg
         guid = r'Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
@@ -157,22 +192,15 @@ def webview2_ok():
             try:
                 with winreg.OpenKey(root, sub) as k:
                     pv = str(winreg.QueryValueEx(k, 'pv')[0] or '').strip()
-                if pv and pv != '0.0.0.0':
-                    return True, pv
+                if pv and pv != '0.0.0.0' and not pv_found:
+                    pv_found = pv
             except Exception:
                 continue
     except Exception:
         pass
-    for d in (r'C:\Program Files (x86)\Microsoft\EdgeWebView\Application',
-              r'C:\Program Files\Microsoft\EdgeWebView\Application',
-              os.path.join(os.environ.get('LOCALAPPDATA') or '', 'Microsoft',
-                           'EdgeWebView', 'Application')):
-        try:
-            if d and os.path.isdir(d) and any(re.match(r'^\d+\.', x) for x in os.listdir(d)):
-                return True, ''
-        except Exception:
-            pass
-    return False, ''
+    if exe:
+        return True, pv_found
+    return False, pv_found
 
 
 
@@ -941,15 +969,32 @@ def _memory_guard():
 
 
 def _boot_guard():
-    """只在「连窗口都没出现」时判定启动失败。
+    """启动守卫，两种失败分开处理（2026-11-21）。
+
+    1. 窗口一直没出现 → 60 秒超时，强制退出（原有逻辑）。
+    2. 窗口出现了但页面 15 秒还没触发 loaded → 判白屏，弹中文指引。
+       这里**只提示、不强退**：万一某些环境 loaded 事件不触发但界面其实正常，
+       强退会打断用户操作（曾发生过一次）。用户看完提示可自行关闭。
 
     不能用 JS 握手当唯一判据：js_api 注入慢一点、前端某步抛异常，
-    界面明明已经正常可用，也会被误杀（曾把一次正常的清理操作打断）。
-    窗口只要出现了，就说明页面加载成功，交给用户正常使用。
+    界面明明已经正常可用，也会被误杀。
     """
-    for _ in range(120):                   # 60 秒
-        if BOOT_READY.is_set() or _visible_hwnd():
-            return
+    first_seen = None
+    for _ in range(120):                   # 最多 60 秒
+        if BOOT_READY.is_set():
+            return                         # 页面已加载，正常
+        if _visible_hwnd():
+            if first_seen is None:
+                first_seen = time.monotonic()
+                diag('WINDOW visible, waiting for page')
+            elif time.monotonic() - first_seen >= 15:
+                diag('BOOT BLANK: window visible but page never loaded')
+                alert('界面显示不出来（白屏）。\n\n'
+                      '按 Ctrl+Shift+Esc 打开任务管理器，看有没有「Microsoft Edge WebView2」进程：\n'
+                      '• 没有 → 电脑缺 WebView2 运行库，到微软官网安装「WebView2 Runtime 常青版」，装完重开。\n'
+                      '• 有 → 把 we-cleaner.exe 加入 360 / 腾讯管家等安全软件的白名单，再重开。\n\n'
+                      '下载页也有图文说明。')
+                return                     # 不 os._exit，避免误报时打断正常界面
         time.sleep(0.5)
     diag('BOOT TIMEOUT: no window appeared, force exit')
     _note_abnormal_exit('上次没启动成功')
